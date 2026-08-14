@@ -70,21 +70,49 @@ window.__ModuleLoader__.load({
         return C;
       }
       var composerShotMounted = false;
+      function diag(msg) {
+        try { fetch(BRIDGE + "/debug", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: msg }), cache: "no-store" }).catch(function () {}); } catch (e) {}
+      }
       function mountComposerShotButton() {
         if (composerShotMounted) return;
         var C = findComposer();
+        diag("mount attempt: composer=" + !!C);
         if (!C) return;
-        // 放进附件按钮所在的左按钮行（红圈位置：输入框左下角按钮区）
         var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]");
+        diag("attach found=" + !!attach + " parent=" + (attach && attach.parentNode ? (attach.parentNode.className || attach.parentNode.tagName) : "-"));
         if (attach && attach.parentNode) {
-          attach.parentNode.appendChild(shotBtn);
+          // 紧跟附件按钮之后插入（红圈位置，保证可见）
+          attach.insertAdjacentElement("afterend", shotBtn);
         } else {
           var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
           if (send && send.parentNode) send.parentNode.insertBefore(shotBtn, send);
           else C.insertBefore(shotBtn, C.firstChild);
         }
         composerShotMounted = true;
+        diag("mounted, position ok, connected=" + shotBtn.isConnected);
       }
+      // 兜底：若输入框一直找不到，10 秒后放到左下角（永远可见可用）
+      var fallbackTimer = setInterval(function () {
+        if (!composerShotMounted && document.body) {
+          diag("fallback: composer not found after wait");
+          if (!shotBtn.isConnected) {
+            shotBtn.style.cssText = [
+              "position:fixed", "left:14px", "bottom:14px", "z-index:9999",
+              "width:32px", "height:32px", "padding:0",
+              "display:flex", "align-items:center", "justify-content:center",
+              "border-radius:10px", "cursor:pointer",
+              "background:var(--dsw-alias-bg-module-platform,rgba(255,255,255,.9))",
+              "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
+              "color:var(--dsw-alias-label-secondary,#4a5670)",
+            ].join(";");
+            document.body.appendChild(shotBtn);
+            composerShotMounted = true;
+            diag("fallback mounted floating");
+          }
+        }
+      }, 1000);
+      var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 12000);
+
       function ensureComposerShotButton() {
         if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
         mountComposerShotButton();
@@ -539,6 +567,8 @@ window.__ModuleLoader__.load({
           return function () {
             clearInterval(timer);
             clearInterval(composerTimer);
+            clearInterval(fallbackTimer);
+            clearInterval(fallbackGuard);
             if (hideTimer) clearTimeout(hideTimer);
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);

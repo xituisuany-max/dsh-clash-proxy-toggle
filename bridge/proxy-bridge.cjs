@@ -324,6 +324,10 @@ const server = http.createServer((req, res) => {
         log("screenshot requested");
         return json(res, 200, await takeScreenshot());
       }
+      if (route === "/debug") {
+        log("debug: " + (body || "(empty)"));
+        return json(res, 200, { ok: true });
+      }
       return json(res, 404, { ok: false, error: "not found" });
     } catch (e) {
       log("error: " + (e && e.stack || e));
