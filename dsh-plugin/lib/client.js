@@ -42,6 +42,131 @@ window.__ModuleLoader__.load({
         "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
       ].join(";");
 
+      // ---------- 上传文件按钮（📎：任意格式文件 → 输入框附件） ----------
+      var fileBtn = document.createElement("button");
+      fileBtn.type = "button";
+      fileBtn.setAttribute("data-proxy-toggle", "filebtn");
+      fileBtn.title = "上传文件：选择任意格式文件（视频/音频/文档/压缩包），自动放入输入框";
+      fileBtn.setAttribute("aria-label", "上传文件");
+      fileBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+      var FILEBTN_INLINE = [
+        "width:26px", "height:26px", "padding:0", "flex:none",
+        "display:inline-flex", "align-items:center", "justify-content:center",
+        "border-radius:50%", "cursor:pointer",
+        "background:var(--dsw-alias-bg-module-platform,#ffffff)",
+        "border:1px solid var(--dsw-alias-border-l2,rgba(176,141,79,.6))",
+        "color:var(--dsw-alias-label-secondary,#4a5670)",
+        "transition:background .15s,border-color .15s",
+      ].join(";");
+      fileBtn.style.cssText = FILEBTN_INLINE;
+      // 隐藏的 file input（支持任意格式、多选）
+      var fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.multiple = true;
+      fileInput.style.display = "none";
+      fileInput.setAttribute("data-proxy-toggle", "fileinput");
+      fileInput.addEventListener("change", function () {
+        var files = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
+        if (files.length) attachFilesToComposer(files);
+        fileInput.value = "";
+      });
+      document.addEventListener("DOMContentLoaded", function () { if (!fileInput.parentNode) document.body.appendChild(fileInput); });
+
+      // 通用附件注入：任意格式文件 → 模拟粘贴进输入框（与截图同一机制，支持多文件）
+      function attachFilesToComposer(files) {
+        var C = findComposer();
+        var input = C ? (C.querySelector("textarea") || C.querySelector("[contenteditable='true']") || C.querySelector("input[type='text']")) : null;
+        if (!input) {
+          diag("file attach: composer input not found");
+          alert("未找到输入框，请稍后重试");
+          return;
+        }
+        try {
+          var dt = new DataTransfer();
+          var oversized = [];
+          files.forEach(function (f) {
+            // 超 200MB 提示（浏览器/组件常见限制）
+            if (f.size > 200 * 1024 * 1024) { oversized.push(f.name + " (" + Math.round(f.size / 1048576) + "MB)"); }
+            dt.items.add(f);
+          });
+          if (oversized.length) {
+            alert("以下文件超过 200MB，可能无法作为附件发送：\n" + oversized.join("\n"));
+          }
+          var ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+          input.dispatchEvent(ev);
+          diag("files attached: " + files.map(function (f) { return f.name + "(" + f.size + ")"; }).join(" | "));
+        } catch (e) {
+          diag("file attach error: " + e.message);
+        }
+      }
+
+      // document 级兜底：即使 composer 定位失败，也拦截文件拖放
+      function hookDocumentDrop() {
+        if (document.documentElement.dataset.dshFileDropDocHooked) return;
+        document.documentElement.dataset.dshFileDropDocHooked = "1";
+        ["dragover", "dragenter"].forEach(function (evName) {
+          document.addEventListener(evName, function (e) {
+            if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, "Files") >= 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }, true);
+        });
+        document.addEventListener("drop", function (e) {
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            var files = Array.prototype.slice.call(e.dataTransfer.files);
+            // 若事件已被 composer 层处理（已 preventDefault 且已注入），这里不再重复
+            var handled = e.defaultPrevented;
+            if (!handled) {
+              e.preventDefault();
+              e.stopPropagation();
+              attachFilesToComposer(files);
+            }
+          }
+        }, true);
+        diag("document drop hooked");
+      }
+
+      // 拦截 composer 区域的文件拖放（解决"拖文件进输入框没反应"）
+      function hookComposerDrop() {
+        var C = findComposer();
+        if (!C || C.dataset.dshFileDropHooked) return;
+        C.dataset.dshFileDropHooked = "1";
+        ["dragover", "dragenter"].forEach(function (evName) {
+          C.addEventListener(evName, function (e) {
+            if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, "Files") >= 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = "copy";
+              C.style.outline = "2px dashed var(--dsw-alias-accent,rgba(77,107,254,.6))";
+            }
+          }, true);
+        });
+        C.addEventListener("dragleave", function () { C.style.outline = ""; }, true);
+        C.addEventListener("drop", function (e) {
+          if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            e.preventDefault();
+            e.stopPropagation();
+            C.style.outline = "";
+            var files = Array.prototype.slice.call(e.dataTransfer.files);
+            attachFilesToComposer(files);
+          }
+        }, true);
+        diag("composer drop hooked");
+      }
+
+      function ensureComposerFileButton() {
+        if (!fileBtn.isConnected && composerShotMounted) {
+          // 截图按钮挂载后，把文件按钮插到它旁边
+          if (shotBtn.parentNode) {
+            shotBtn.insertAdjacentElement("afterend", fileBtn);
+            copyButtonStyle(shotBtn, fileBtn);
+          }
+        }
+        hookComposerDrop();
+      }
+
       // ---------- 截图按钮（QQ 风格：放在聊天输入框左按钮行） ----------
       var shotBtn = document.createElement("button");
       shotBtn.type = "button";
@@ -265,6 +390,8 @@ window.__ModuleLoader__.load({
           document.body.appendChild(shotBtn);
           refBtn.style.cssText = FLOAT_STYLE;
           shotBtn.insertAdjacentElement("afterend", refBtn);
+          fileBtn.style.cssText = FLOAT_STYLE;
+          shotBtn.insertAdjacentElement("beforebegin", fileBtn);
           fallbackMounted = true;
         }
       }, 1000);
@@ -299,7 +426,7 @@ window.__ModuleLoader__.load({
             for (var c2 = 0; c2 < e2.children.length; c2++) {
               if (/DeepSeek|V4|High|模型/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
             }
-            if (!hasInner2 && e2.children.length <= 2) { target = e2; break; }
+            if (!hasInner2 && e2.children.length <= 4) { target = e2; break; }
           }
         }
         if (target) {
@@ -310,7 +437,7 @@ window.__ModuleLoader__.load({
         }
       }
       var refTimer = setInterval(function () {
-        if (refMountedTop && refBtn.isConnected) { clearInterval(refTimer); return; }
+        if (refMountedTop && refBtn.isConnected) return;
         mountRefButtonTop();
       }, 1000);
       var refGuard = setInterval(function () { if (refMountedTop && refBtn.isConnected) clearInterval(refTimer); }, 30000);
@@ -667,6 +794,10 @@ window.__ModuleLoader__.load({
       btn.addEventListener("click", toggle);
       pBtn.addEventListener("click", toggle);
       shotBtn.addEventListener("click", takeScreenshot);
+      fileBtn.addEventListener("click", function () {
+        if (!fileInput.parentNode) document.body.appendChild(fileInput);
+        fileInput.click();
+      });
       sel.addEventListener("change", onNodeChange);
       document.addEventListener("click", onClickOutside);
 
@@ -696,6 +827,7 @@ window.__ModuleLoader__.load({
       }
       function upgradeMedia() {
         ensureComposerShotButton();  // 输入框重渲染后恢复截图按钮
+        ensureComposerFileButton();  // 恢复文件上传按钮
 
         // 消息里的媒体链接 [文字](xxx.mp4/mp3) → 内嵌播放器
         document.querySelectorAll("a[href]").forEach(function (a) {
@@ -752,6 +884,7 @@ window.__ModuleLoader__.load({
           "[data-proxy-toggle='pbtn']:not(:disabled):active{transform:translateY(0);filter:brightness(.96)}",
           "[data-proxy-toggle='refbtn']:hover{background:rgba(255,255,255,.32);border-color:rgba(255,255,255,.55)}",
           "[data-proxy-toggle='shotbtn']:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.07));border-color:var(--dsw-alias-border-l2,rgba(120,130,150,.35))}",
+          "[data-proxy-toggle='filebtn']:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.07));border-color:var(--dsw-alias-border-l2,rgba(120,130,150,.35))}",
         ].join("");
         document.head.appendChild(style);
         document.body.appendChild(btn);
@@ -764,9 +897,12 @@ window.__ModuleLoader__.load({
         // 截图按钮挂到输入框（composer），轮询等待输入框出现；强刷按钮挂顶栏
         mountComposerShotButton();
         mountRefButtonTop();
+        ensureComposerFileButton();
+        hookComposerDrop();
+        hookDocumentDrop();
         var composerTimer = setInterval(function () {
           mountComposerShotButton();
-          if (composerShotMounted) clearInterval(composerTimer);
+          ensureComposerFileButton();
         }, 800);
         ctx.effect(function () {
           return function () {
@@ -780,10 +916,13 @@ window.__ModuleLoader__.load({
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
+            if (fileBtn.parentNode) fileBtn.parentNode.removeChild(fileBtn);
+            if (fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
             if (refBtn.parentNode) refBtn.parentNode.removeChild(refBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (style.parentNode) style.parentNode.removeChild(style);
             delete document.body.dataset[MARKER];
+            delete document.documentElement.dataset.dshFileDropDocHooked;
           };
         });
       }
