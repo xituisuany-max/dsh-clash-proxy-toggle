@@ -226,22 +226,23 @@ async function takeScreenshot() {
       "$f=New-Object System.Windows.Forms.Form; " +
       "$f.FormBorderStyle='None'; $f.Bounds=$vs; $f.StartPosition='Manual'; $f.TopMost=$true; " +
       "$f.Opacity=0.35; $f.BackColor='Black'; $f.Cursor=[System.Windows.Forms.Cursors]::Cross; " +
-      "$f.ShowInTaskbar=$false; $f.DoubleBuffered=$true; " +
-      "$start=[System.Drawing.Point]::Empty; $cur=[System.Drawing.Point]::Empty; $drawing=$false; $saved=''; " +
-      "$f.add_Paint({param($s,$e) if($drawing){ $pen=New-Object System.Drawing.Pen ([System.Drawing.Color]::Cyan),2; " +
-      "$r=New-Object System.Drawing.Rectangle ([Math]::Min($start.X,$cur.X)),([Math]::Min($start.Y,$cur.Y)),([Math]::Abs($cur.X-$start.X)),([Math]::Abs($cur.Y-$start.Y)); " +
+      "$f.ShowInTaskbar=$false; " +
+      "$st=@{drawing=$false;sx=0;sy=0;cx=0;cy=0;saved=''}; " +
+      "$f.add_Paint({param($s,$e) if($st.drawing){ " +
+      "$pen=New-Object System.Drawing.Pen ([System.Drawing.Color]::Cyan),2; " +
+      "$r=New-Object System.Drawing.Rectangle ([Math]::Min($st.sx,$st.cx)),([Math]::Min($st.sy,$st.cy)),([Math]::Abs($st.cx-$st.sx)),([Math]::Abs($st.cy-$st.sy)); " +
       "$e.Graphics.DrawRectangle($pen,$r); $pen.Dispose() } }); " +
-      "$f.add_MouseDown({param($s,$e) if($e.Button -eq 'Left'){ $drawing=$true; $start=$e.Location; $cur=$e.Location; $f.Invalidate() } }); " +
-      "$f.add_MouseMove({param($s,$e) if($drawing){ $cur=$e.Location; $f.Invalidate() } }); " +
-      "$f.add_MouseUp({param($s,$e) if(-not $drawing){return} $drawing=$false; " +
-      "$x=[Math]::Min($start.X,$cur.X); $y=[Math]::Min($start.Y,$cur.Y); $w=[Math]::Abs($cur.X-$start.X); $h=[Math]::Abs($cur.Y-$start.Y); " +
+      "$f.add_MouseDown({param($s,$e) if($e.Button -eq 'Left'){ $st.drawing=$true; $st.sx=$e.Location.X; $st.sy=$e.Location.Y; $st.cx=$e.Location.X; $st.cy=$e.Location.Y; $f.Invalidate() } }); " +
+      "$f.add_MouseMove({param($s,$e) if($st.drawing){ $st.cx=$e.Location.X; $st.cy=$e.Location.Y; $f.Invalidate() } }); " +
+      "$f.add_MouseUp({param($s,$e) if(-not $st.drawing){return} $st.drawing=$false; " +
+      "$x=[Math]::Min($st.sx,$st.cx); $y=[Math]::Min($st.sy,$st.cy); $w=[Math]::Abs($st.cx-$st.sx); $h=[Math]::Abs($st.cy-$st.sy); " +
       "if($w -lt 3 -or $h -lt 3){ $f.Close(); return }; " +
       "$bmp=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($bmp); " +
       "$g.CopyFromScreen(($vs.X+$x),($vs.Y+$y),0,0,(New-Object System.Drawing.Size($w,$h))); " +
       "$path=Join-Path '" + dir + "' ('screenshot-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.png'); " +
-      "$bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); $saved=$path; $f.Close() }); " +
+      "$bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); $st.saved=$path; $f.Close() }); " +
       "$f.add_KeyDown({param($s,$e) if($e.KeyCode -eq 'Escape'){ $f.Close() } }); " +
-      "[void]$f.ShowDialog(); if($saved){ Write-Output $saved } else { Write-Output 'CANCELLED' }";
+      "[void]$f.ShowDialog(); if($st.saved){ Write-Output $st.saved } else { Write-Output 'CANCELLED' }";
     const r = await runPowershell(["-Command", ps], true, 90000); // 等用户框选（最长 90s）
     const out = (r.out || "").trim();
     if (/CANCELLED/i.test(out)) return { ok: false, cancelled: true, error: "已取消" };
