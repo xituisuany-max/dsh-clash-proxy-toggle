@@ -65,7 +65,7 @@ node bridge\proxy-bridge.cjs
 
 ```powershell
 # 方式 A：通过 dsh 命令行（推荐，支持 git 地址）
-dsh plugin --profile web add https://github.com/<你的账号>/dsh-clash-proxy-toggle
+dsh plugin --profile web add https://github.com/xituisuany-max/dsh-clash-proxy-toggle
 
 # 方式 B：手动注册
 # 在 harness-home\profiles\web\package.json 的 dependencies 加入：
