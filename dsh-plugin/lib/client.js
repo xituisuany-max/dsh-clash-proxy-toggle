@@ -147,8 +147,13 @@ window.__ModuleLoader__.load({
       function isPlusBtn(b) {
         var t = (b.textContent || "").replace(/\s/g, "");
         if (t === "+") return true;
-        var d = (b.innerHTML || "");
-        return /M12 5v14|M5 12h14/.test(d);
+        var h = (b.innerHTML || "");
+        return /M12 5v14|M5 12h14|lucide-plus|icon-plus/i.test(h) || /plus|add/i.test(b.className || "");
+      }
+      // 识别盾牌按钮（盾牌 SVG 路径 / shield 类名）
+      function isShieldBtn(b) {
+        var h = (b.innerHTML || "");
+        return /M12 22s8-4 8-10V5l-8-3|M20 13c0 5-3\.5 7\.5-7\.66 8\.95|shield/i.test(h) || /shield/i.test(b.className || "");
       }
       function mountComposerShotButton() {
         if (composerShotMounted) return;
@@ -158,36 +163,38 @@ window.__ModuleLoader__.load({
         // 若在兜底位置，先移出
         if (fallbackMounted && shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
         fallbackMounted = false;
-        // 找"+"按钮
-        var allBtns = C.querySelectorAll("button");
-        var plusBtn = null;
-        for (var bi = 0; bi < allBtns.length; bi++) { if (isPlusBtn(allBtns[bi])) { plusBtn = allBtns[bi]; break; } }
-        diag("plus found=" + !!plusBtn + " totalBtns=" + allBtns.length);
-        if (plusBtn) {
-          // 按文档顺序找"+"之后的下一个按钮（即盾牌），插到它右边
-          var all2 = C.querySelectorAll("button");
-          var shieldBtn = null;
-          for (var q = 0; q < all2.length; q++) {
-            if (all2[q] === plusBtn) { shieldBtn = all2[q + 1] || null; break; }
-          }
-          if (shieldBtn) {
-            shieldBtn.insertAdjacentElement("afterend", shotBtn);
-            copyButtonStyle(shieldBtn, shotBtn);
-            diag("shot placed after shield: " + (shieldBtn.textContent || "").trim().slice(0, 10));
-          } else {
-            plusBtn.insertAdjacentElement("afterend", shotBtn);
-            copyButtonStyle(plusBtn, shotBtn);
-          }
+        var clickables = C.querySelectorAll("button, [role='button']");
+        // 1) 优先：找到盾牌 → 插到它右边
+        var shield = null;
+        for (var s = 0; s < clickables.length; s++) { if (isShieldBtn(clickables[s])) { shield = clickables[s]; break; } }
+        if (shield) {
+          shield.insertAdjacentElement("afterend", shotBtn);
+          copyButtonStyle(shield, shotBtn);
+          diag("shot placed after SHIELD (found=" + clickables.length + ")");
         } else {
-          // 没有"+"：插到第一个圆形小按钮后面并复制其样式
-          var anchor = null;
-          for (var a = 0; a < allBtns.length; a++) {
-            var btn = allBtns[a];
-            var bs = btn.getBoundingClientRect();
-            if (bs.width > 18 && bs.width < 46 && Math.abs(bs.width - bs.height) < 6) { anchor = btn; break; }
+          // 2) 找"+"，插到它文档顺序的下一个按钮（盾牌）右边
+          var plus = null;
+          for (var p = 0; p < clickables.length; p++) { if (isPlusBtn(clickables[p])) { plus = clickables[p]; break; } }
+          diag("shield found=" + !!shield + " plus found=" + !!plus + " totalBtns=" + clickables.length);
+          if (plus) {
+            var target = plus, seen = false;
+            for (var q = 0; q < clickables.length; q++) {
+              if (seen) { target = clickables[q]; break; }
+              if (clickables[q] === plus) seen = true;
+            }
+            target.insertAdjacentElement("afterend", shotBtn);
+            copyButtonStyle(target, shotBtn);
+          } else {
+            // 3) 兜底：第一个方形小按钮之后
+            var anchor = null;
+            for (var a = 0; a < clickables.length; a++) {
+              var btn = clickables[a];
+              var bs = btn.getBoundingClientRect();
+              if (bs.width > 18 && bs.width < 46 && Math.abs(bs.width - bs.height) < 6) { anchor = btn; break; }
+            }
+            if (anchor) { anchor.insertAdjacentElement("afterend", shotBtn); copyButtonStyle(anchor, shotBtn); }
+            else C.insertBefore(shotBtn, C.firstChild);
           }
-          if (anchor) { anchor.insertAdjacentElement("afterend", shotBtn); copyButtonStyle(anchor, shotBtn); }
-          else C.insertBefore(shotBtn, C.firstChild);
         }
         composerShotMounted = true;
         diag("mounted in composer, connected=" + shotBtn.isConnected);
