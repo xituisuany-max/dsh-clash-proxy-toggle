@@ -135,7 +135,7 @@ window.__ModuleLoader__.load({
       function diag(msg) {
         try { fetch(BRIDGE + "/debug", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: msg }), cache: "no-store" }).catch(function () {}); } catch (e) {}
       }
-      // 复制源按钮的样式（圆形/白底/金边随主题自动统一）
+      // 复制源按钮的样式（大小/圆角/背景/边框/颜色随主题自动统一），图标按按钮尺寸缩放
       function copyButtonStyle(srcBtn, dstBtn) {
         try {
           var cs = window.getComputedStyle(srcBtn);
@@ -151,6 +151,15 @@ window.__ModuleLoader__.load({
           dstBtn.style.alignItems = "center";
           dstBtn.style.justifyContent = "center";
           dstBtn.style.flex = "none";
+          var svg = dstBtn.querySelector("svg");
+          if (svg && cs.width) {
+            var w = parseFloat(cs.width);
+            if (w > 18 && w < 60) {
+              var icon = Math.round(w * 0.45);
+              svg.setAttribute("width", String(icon));
+              svg.setAttribute("height", String(icon));
+            }
+          }
         } catch (e) {}
       }
       // 识别"+"附件按钮（文字为 + 或含加号 SVG）
@@ -197,7 +206,7 @@ window.__ModuleLoader__.load({
         for (var s = 0; s < clickables.length; s++) { if (isShieldBtn(clickables[s])) { shield = clickables[s]; break; } }
         if (shield) {
           shield.insertAdjacentElement("afterend", shotBtn);
-          shotBtn.style.cssText = SHOTBTN_CIRCLE;
+          copyButtonStyle(shield, shotBtn);
           diag("shot placed after SHIELD (found=" + clickables.length + ")");
         } else {
           // 2) 找"+"，插到它文档顺序的下一个按钮（盾牌）右边
@@ -216,7 +225,9 @@ window.__ModuleLoader__.load({
             }
             if (!target) target = plus;
             target.insertAdjacentElement("afterend", shotBtn);
-            shotBtn.style.cssText = SHOTBTN_CIRCLE;
+            // 样式以真实的圆形按钮为基准（+ 或目标按钮），保证大小/边框完全一致
+            var styleRef = (target.tagName === "BUTTON" || (target.getAttribute && target.getAttribute("role") === "button")) ? target : plus;
+            copyButtonStyle(styleRef, shotBtn);
             diag("shot after tag=" + target.tagName + " cls=" + String(target.className || "").slice(0, 30));
           } else {
             // 3) 兜底：第一个方形小按钮之后
