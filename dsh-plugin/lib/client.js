@@ -59,6 +59,32 @@ window.__ModuleLoader__.load({
       ].join(";");
       shotBtn.style.cssText = SHOTBTN_INLINE;
 
+      // ---------- 强刷按钮（等价 Ctrl+F5：清缓存 + 重载） ----------
+      var refBtn = document.createElement("button");
+      refBtn.type = "button";
+      refBtn.setAttribute("data-proxy-toggle", "refbtn");
+      refBtn.title = "强制刷新页面（等价 Ctrl+F5，加载插件最新代码）";
+      refBtn.setAttribute("aria-label", "强制刷新");
+      refBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+      refBtn.style.cssText = SHOTBTN_INLINE;
+      refBtn.addEventListener("click", hardRefresh);
+
+      function hardRefresh() {
+        // 1) 清 Cache Storage（脚本/样式缓存）
+        try {
+          if (window.caches) {
+            caches.keys().then(function (ks) {
+              return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+            }).catch(function () {});
+          }
+        } catch (e) {}
+        // 2) 带新鲜参数重载（强制重新请求所有资源）
+        var u = location.href.split("#")[0];
+        var sep = u.indexOf("?") >= 0 ? "&" : "?";
+        location.href = u + sep + "_r=" + Date.now();
+      }
+
+
       function findComposer() {
         var C = document.querySelector("[data-composer-card]");
         if (!C) {
@@ -99,15 +125,18 @@ window.__ModuleLoader__.load({
         if (fallbackMounted && shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
         fallbackMounted = false;
         shotBtn.style.cssText = SHOTBTN_INLINE;
+        refBtn.style.cssText = SHOTBTN_INLINE;
         var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i], [aria-label*='upload' i], [class*='upload' i]");
         diag("attach found=" + !!attach + " parent=" + (attach && attach.parentNode ? (attach.parentNode.className || attach.parentNode.tagName) : "-"));
         if (attach && attach.parentNode) {
-          // 紧跟附件按钮之后插入（红圈位置，保证可见）
+          // 紧跟附件按钮之后插入（红圈位置，保证可见），截图 + 强刷两个按钮
           attach.insertAdjacentElement("afterend", shotBtn);
+          shotBtn.insertAdjacentElement("afterend", refBtn);
         } else {
           var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
           if (send && send.parentNode) send.parentNode.insertBefore(shotBtn, send);
           else C.insertBefore(shotBtn, C.firstChild);
+          shotBtn.insertAdjacentElement("afterend", refBtn);
         }
         composerShotMounted = true;
         diag("mounted in composer, connected=" + shotBtn.isConnected);
@@ -120,7 +149,7 @@ window.__ModuleLoader__.load({
         if (fallbackTicks < 20) return;
         if (!fallbackMounted && document.body && !shotBtn.isConnected) {
           diag("fallback floating mounted (composer still not found)");
-          shotBtn.style.cssText = [
+          var FLOAT_STYLE = [
             "position:fixed", "left:14px", "bottom:14px", "z-index:9999",
             "width:32px", "height:32px", "padding:0",
             "display:flex", "align-items:center", "justify-content:center",
@@ -129,7 +158,10 @@ window.__ModuleLoader__.load({
             "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
             "color:var(--dsw-alias-label-secondary,#4a5670)",
           ].join(";");
+          shotBtn.style.cssText = FLOAT_STYLE;
           document.body.appendChild(shotBtn);
+          refBtn.style.cssText = FLOAT_STYLE;
+          shotBtn.insertAdjacentElement("afterend", refBtn);
           fallbackMounted = true;
         }
       }, 1000);
@@ -595,6 +627,7 @@ window.__ModuleLoader__.load({
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
+            if (refBtn.parentNode) refBtn.parentNode.removeChild(refBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (style.parentNode) style.parentNode.removeChild(style);
             delete document.body.dataset[MARKER];
