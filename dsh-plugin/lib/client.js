@@ -129,14 +129,12 @@ window.__ModuleLoader__.load({
         var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i], [aria-label*='upload' i], [class*='upload' i]");
         diag("attach found=" + !!attach + " parent=" + (attach && attach.parentNode ? (attach.parentNode.className || attach.parentNode.tagName) : "-"));
         if (attach && attach.parentNode) {
-          // 紧跟附件按钮之后插入（红圈位置，保证可见），截图 + 强刷两个按钮
+          // 紧跟附件按钮之后插入（红圈位置，保证可见）——只放截图按钮，强刷按钮在顶栏
           attach.insertAdjacentElement("afterend", shotBtn);
-          shotBtn.insertAdjacentElement("afterend", refBtn);
         } else {
           var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
           if (send && send.parentNode) send.parentNode.insertBefore(shotBtn, send);
           else C.insertBefore(shotBtn, C.firstChild);
-          shotBtn.insertAdjacentElement("afterend", refBtn);
         }
         composerShotMounted = true;
         diag("mounted in composer, connected=" + shotBtn.isConnected);
@@ -166,6 +164,39 @@ window.__ModuleLoader__.load({
         }
       }, 1000);
       var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 25000);
+
+      // 强刷按钮挂到顶栏"标准模式"旁边
+      var refMountedTop = false;
+      function mountRefButtonTop() {
+        if (refMountedTop) return;
+        var candidates = document.querySelectorAll("button, [role='tab'], [class*='mode' i], [class*='header' i] span, [class*='header' i] div, [class*='header' i] button");
+        var target = null;
+        for (var i = 0; i < candidates.length; i++) {
+          var el = candidates[i];
+          if (el.offsetParent !== null && el.textContent && el.textContent.replace(/\s/g, "").indexOf("标准模式") >= 0) {
+            target = el;
+            break;
+          }
+        }
+        if (!target) {
+          // 备选：顶栏里含"DeepSeek"或模型名的按钮/标签
+          for (var j = 0; j < candidates.length; j++) {
+            var e2 = candidates[j];
+            if (e2.offsetParent !== null && e2.textContent && /DeepSeek|V4|High|模型/.test(e2.textContent) && e2.children.length <= 2) {
+              target = e2;
+              break;
+            }
+          }
+        }
+        if (target) {
+          refBtn.style.cssText = SHOTBTN_INLINE;
+          target.insertAdjacentElement("afterend", refBtn);
+          refMountedTop = true;
+          diag("ref button mounted next to: " + (target.textContent || "").trim().slice(0, 20));
+        }
+      }
+      var refTimer = setInterval(function () { mountRefButtonTop(); if (refMountedTop) clearInterval(refTimer); }, 1000);
+      var refGuard = setInterval(function () { if (refMountedTop) clearInterval(refTimer); }, 30000);
 
       function ensureComposerShotButton() {
         if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
@@ -611,8 +642,9 @@ window.__ModuleLoader__.load({
         refresh();
         var timer = setInterval(refresh, POLL_MS);
         var videoObs = startMediaObserver();
-        // 截图按钮挂到输入框（composer），轮询等待输入框出现
+        // 截图按钮挂到输入框（composer），轮询等待输入框出现；强刷按钮挂顶栏
         mountComposerShotButton();
+        mountRefButtonTop();
         var composerTimer = setInterval(function () {
           mountComposerShotButton();
           if (composerShotMounted) clearInterval(composerTimer);
@@ -623,6 +655,8 @@ window.__ModuleLoader__.load({
             clearInterval(composerTimer);
             clearInterval(fallbackTimer);
             clearInterval(fallbackGuard);
+            clearInterval(refTimer);
+            clearInterval(refGuard);
             if (hideTimer) clearTimeout(hideTimer);
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
