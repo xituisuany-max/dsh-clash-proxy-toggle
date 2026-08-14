@@ -215,42 +215,31 @@ async function setNode(nodeName) {
   return { ok: applied.length > 0, applied };
 }
 
-// QQ 风格框选截图：弹全屏选区窗口（十字光标、拖动框选、Esc 取消），截取所选区域
+// QQ 风格框选截图：调用开源 Flameshot（拖选 + 标注工具栏 + 确认/Esc 取消）
+// flameshot gui -p <文件>：打开截图 GUI，确认后保存到该文件；取消则文件不存在
+function runFlameshot(args, timeoutMs) {
+  return new Promise((resolve) => {
+    const FLAMESHOT = process.env.FLAMESHOT_EXE || "C:\\Program Files\\Flameshot\\bin\\flameshot.exe";
+    execFile(FLAMESHOT, args, { windowsHide: true, timeout: timeoutMs || 120000 }, (err, stdout, stderr) => {
+      resolve({ err, stdout: stdout || "", stderr: stderr || "" });
+    });
+  });
+}
+
 async function takeScreenshot() {
   try {
     fs.mkdirSync(MEDIA_DIR, { recursive: true });
-    const dir = MEDIA_DIR.replace(/'/g, "''");
-    const ps =
-      "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; " +
-      "$vs=[System.Windows.Forms.SystemInformation]::VirtualScreen; " +
-      "$f=New-Object System.Windows.Forms.Form; " +
-      "$f.FormBorderStyle='None'; $f.Bounds=$vs; $f.StartPosition='Manual'; $f.TopMost=$true; " +
-      "$f.Opacity=0.35; $f.BackColor='Black'; $f.Cursor=[System.Windows.Forms.Cursors]::Cross; " +
-      "$f.ShowInTaskbar=$false; " +
-      "$st=@{drawing=$false;sx=0;sy=0;cx=0;cy=0;saved=''}; " +
-      "$f.add_Paint({param($s,$e) if($st.drawing){ " +
-      "$pen=New-Object System.Drawing.Pen ([System.Drawing.Color]::Cyan),2; " +
-      "$r=New-Object System.Drawing.Rectangle ([Math]::Min($st.sx,$st.cx)),([Math]::Min($st.sy,$st.cy)),([Math]::Abs($st.cx-$st.sx)),([Math]::Abs($st.cy-$st.sy)); " +
-      "$e.Graphics.DrawRectangle($pen,$r); $pen.Dispose() } }); " +
-      "$f.add_MouseDown({param($s,$e) if($e.Button -eq 'Left'){ $st.drawing=$true; $st.sx=$e.Location.X; $st.sy=$e.Location.Y; $st.cx=$e.Location.X; $st.cy=$e.Location.Y; $f.Invalidate() } }); " +
-      "$f.add_MouseMove({param($s,$e) if($st.drawing){ $st.cx=$e.Location.X; $st.cy=$e.Location.Y; $f.Invalidate() } }); " +
-      "$f.add_MouseUp({param($s,$e) if(-not $st.drawing){return} $st.drawing=$false; " +
-      "$x=[Math]::Min($st.sx,$st.cx); $y=[Math]::Min($st.sy,$st.cy); $w=[Math]::Abs($st.cx-$st.sx); $h=[Math]::Abs($st.cy-$st.sy); " +
-      "if($w -lt 3 -or $h -lt 3){ $f.Close(); return }; " +
-      "$bmp=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($bmp); " +
-      "$g.CopyFromScreen(($vs.X+$x),($vs.Y+$y),0,0,(New-Object System.Drawing.Size($w,$h))); " +
-      "$path=Join-Path '" + dir + "' ('screenshot-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.png'); " +
-      "$bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); $st.saved=$path; $f.Close() }); " +
-      "$f.add_KeyDown({param($s,$e) if($e.KeyCode -eq 'Escape'){ $f.Close() } }); " +
-      "[void]$f.ShowDialog(); if($st.saved){ Write-Output $st.saved } else { Write-Output 'CANCELLED' }";
-    const r = await runPowershell(["-Command", ps], true, 90000); // 等用户框选（最长 90s）
-    const out = (r.out || "").trim();
-    if (/CANCELLED/i.test(out)) return { ok: false, cancelled: true, error: "已取消" };
-    const m = out.match(/screenshot-\d{8}-\d{6}\.png/);
-    if (!m) { log("screenshot failed: " + out.slice(0, 300)); return { ok: false, error: "capture failed: " + out.slice(0, 200) }; }
-    const name = m[0];
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    const name = `screenshot-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.png`;
     const full = path.join(MEDIA_DIR, name);
-    return { ok: true, file: name, url: "http://127.0.0.1:" + BRIDGE_PORT + "/media/" + encodeURIComponent(name), path: full, size: fs.existsSync(full) ? fs.statSync(full).size : 0 };
+    const r = await runFlameshot(["gui", "-p", full], 120000); // 等用户框选（最长 120s）
+    if (fs.existsSync(full)) {
+      return { ok: true, file: name, url: "http://127.0.0.1:" + BRIDGE_PORT + "/media/" + encodeURIComponent(name), path: full, size: fs.statSync(full).size };
+    }
+    const msg = (r.stderr || "").trim().slice(0, 200) || (r.err && r.err.message || "已取消");
+    if (/cancel/i.test(msg + (r.stdout || ""))) return { ok: false, cancelled: true, error: "已取消" };
+    return { ok: false, cancelled: true, error: msg || "已取消" };
   } catch (e) {
     log("screenshot error: " + (e && e.stack || e));
     return { ok: false, error: String(e && e.message || e) };
