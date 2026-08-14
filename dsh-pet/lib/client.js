@@ -38,6 +38,121 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       if (document.body && document.body.dataset[MARKER]) return;
 
+      // ---------- 工作状态联动 ----------
+      // 完成工作 -> happy；出错 -> cry；用户离开 -> wave
+      var DEBUG = true;
+      var lastProbeShown = "";
+      function dbg(msg) {
+        if (DEBUG) {
+          try { console.log("[dsh-pet] " + msg); } catch (e) {}
+        }
+      }
+      // 把关键状态显示到气泡（用户可见，用于验证）
+      function showBubbleText(text, ms) {
+        try {
+          bubble.textContent = text;
+          if (!bubble.parentNode) document.body.appendChild(bubble);
+          var pr = pet.getBoundingClientRect();
+          bubble.style.left = (pr.left + pr.width / 2) + "px";
+          bubble.style.top = (pr.top - 36) + "px";
+          bubble.style.transform = "translateX(-50%)";
+          bubble.style.display = "block";
+          setTimeout(function () { bubble.style.display = "none"; }, ms || 2500);
+        } catch (e) {}
+      }
+
+      // 会话状态联动（ctx.sessions 由 dsh-client-runtime 提供，若不可用则跳过）
+      var lastRunning = false;
+      var lastErrorSeqs = [];
+      var sessionUnsub = null;
+      function hookSession(s) {
+        if (!s || typeof s.subscribe !== "function") { dbg("no session face"); return; }
+        if (sessionUnsub) { try { sessionUnsub(); } catch (e) {} sessionUnsub = null; }
+        try {
+          sessionUnsub = s.subscribe(function () {
+            var snap;
+            try { snap = s.getSnapshot ? s.getSnapshot() : null; } catch (e) { snap = null; }
+            if (!snap) return;
+            var running = !!snap.running;
+            var nodes = snap.nodes || [];
+            // 出错检测：turn-error 或 tool-result.error 或 command outcome error
+            var hasError = false;
+            for (var i = 0; i < nodes.length; i++) {
+              var n = nodes[i];
+              if (!n) continue;
+              if (n.kind === "turn-error") { hasError = true; break; }
+              if (n.kind === "tool-result" && n.error) { hasError = true; break; }
+              if (n.kind === "command" && n.outcome && n.outcome.kind === "error") { hasError = true; break; }
+            }
+            if (hasError) {
+              dbg("error node detected -> cry");
+              showBubbleText("呜…出错了 QAQ", 2600);
+              playAction("cry");
+            } else if (lastRunning && !running) {
+              // turn 刚结束且无错误 -> 完成 -> happy
+              dbg("turn finished -> happy");
+              showBubbleText("搞定啦！🎉", 2600);
+              playAction("happy");
+            }
+            lastRunning = running;
+          });
+          dbg("session hooked: " + (s.sessionId || "?"));
+        } catch (e) { dbg("hook error: " + e.message); }
+      }
+      function hookSessions() {
+        try {
+          // 用 ctx.get("sessions") 可选查找（不触发 inject 门控，失败返回 undefined）
+          var sessions;
+          try { sessions = ctx.get ? ctx.get("sessions") : undefined; } catch (e) { sessions = undefined; }
+          if (!sessions) { dbg("ctx.get sessions unavailable"); return; }
+          // 探测结构
+          var probe = {};
+          try { probe.keys = Object.keys(sessions).slice(0, 30); } catch (e) { probe.keysErr = e.message; }
+          try { probe.listType = typeof sessions.list; } catch (e) { probe.listErr = e.message; }
+          try { probe.bindingType = typeof sessions.binding; } catch (e) { probe.bindingErr = e.message; }
+          try { probe.scopeType = typeof sessions.scope; } catch (e) { probe.scopeErr = e.message; }
+          try { probe.current = sessions.list ? sessions.list.getSnapshot().current : undefined; } catch (e) { probe.currentErr = e.message; }
+          dbg("sessions probe: " + JSON.stringify(probe));
+          try { showBubbleText("🐳 联动就绪 " + (sessions ? "S" : "noS"), 3000); } catch (e) {}
+
+          var list = sessions.list;
+          if (!list || typeof list.subscribe !== "function") { dbg("no list.subscribe"); return; }
+          var connectCurrent = function () {
+            var snap = list.getSnapshot ? list.getSnapshot() : null;
+            var currentId = snap ? snap.current : undefined;
+            dbg("current=" + currentId);
+            var cur = undefined;
+            try {
+              if (currentId && typeof sessions.binding === "function") {
+                var b = sessions.binding(currentId);
+                cur = b && b.session;
+              }
+            } catch (e) { dbg("binding err: " + e.message); }
+            if (!cur && currentId && typeof sessions.scope === "function") {
+              try { cur = sessions.scope(currentId); } catch (e) { dbg("scope err: " + e.message); }
+            }
+            hookSession(cur);
+          };
+          list.subscribe(connectCurrent);
+          // 初始立即连接当前会话（subscribe 只在变化时回调）
+          setTimeout(connectCurrent, 300);
+          dbg("sessions hooked");
+        } catch (e) { dbg("sessions hook error: " + e.message); }
+      }
+
+      // 用户离开：页面隐藏或窗口失焦 -> wave（注册延迟到 mount，避免元素未就绪时触发）
+      var leftTimer = null;
+      function onLeave() {
+        if (document.hidden) {
+          dbg("page hidden -> wave");
+          playAction("wave");
+        }
+      }
+      function onBlur() {
+        dbg("window blur -> wave");
+        playAction("wave");
+      }
+
       // ---------- 桌宠元素 ----------
       var pet = document.createElement("div");
       pet.setAttribute("data-dsh-pet", "root");
@@ -238,6 +353,9 @@ window.__ModuleLoader__.load({
         document.body.appendChild(pet);
         document.body.dataset[MARKER] = "1";
         initSprites();
+        document.addEventListener("visibilitychange", onLeave);
+        window.addEventListener("blur", onBlur);
+        hookSessions();
       }
       mount();
 
@@ -246,6 +364,9 @@ window.__ModuleLoader__.load({
           if (pet.parentNode) pet.parentNode.removeChild(pet);
           if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
           if (style.parentNode) style.parentNode.removeChild(style);
+          if (sessionUnsub) { try { sessionUnsub(); } catch (e) {} sessionUnsub = null; }
+          document.removeEventListener("visibilitychange", onLeave);
+          window.removeEventListener("blur", onBlur);
           delete document.body.dataset[MARKER];
         };
       });
