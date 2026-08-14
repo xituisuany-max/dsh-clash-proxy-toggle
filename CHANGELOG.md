@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.3.1] - 2026-08-14
+
+### 🔧 修复
+
+- **看门狗不再弹黑色控制台窗口**：Task Scheduler 直接启动 `powershell.exe` 时，即使带 `-WindowStyle Hidden`，conhost 仍会在隐藏样式生效前闪一下（每 2 分钟一次）。改用 `wscript.exe` + `bridge/bridge-watchdog.vbs`（GUI 子系统宿主，永远不会创建控制台），并用 `MSXML2.ServerXMLHTTP` 直接探测桥接健康端点，全程零窗口、零 PowerShell
+- 计划任务 `dsh-bridge-watchdog` 本体标记为 Hidden，任务列表不再显示
+
+### 📦 新增
+
+- `bridge/bridge-watchdog.vbs` — 无窗口看门狗（支持 `PROXY_BRIDGE_PORT` / `NODE_EXE` / `PROXY_BRIDGE_MEDIA_DIR` 环境变量）
+
 ## [v0.3.0] - 2026-08-14
 
 ### ✨ 新增

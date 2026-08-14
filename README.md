@@ -20,6 +20,8 @@
 
 > 完整更新历史见 [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/xituisuany-max/dsh-clash-proxy-toggle/releases)
 
+**v0.3.1** 修复：看门狗改用无窗口方案（不再每 2 分钟闪一次黑色控制台）
+
 **v0.3.0** 新增：
 
 - 🎯 **QQ 风格框选截图**：输入框 📷 按钮 → 调起 [Flameshot](https://github.com/flameshot-org/flameshot) 全屏框选（变暗 + 十字光标 + 拖动选区 + 标注工具栏 + 确认 / Esc 取消）
@@ -59,6 +61,7 @@
 |---|---|
 | `clash.ps1` | Clash 代理管理脚本（启动/停止/换节点/自检/接管） |
 | `bridge/proxy-bridge.cjs` | 本地 HTTP 桥接服务（127.0.0.1:54123），供 GUI 插件调用（状态/节点/媒体/截图） |
+| `bridge/bridge-watchdog.vbs` | 无窗口自愈看门狗（计划任务经 wscript.exe 运行，绝不闪控制台） |
 | `dsh-plugin/` | DeepSeek Harness 客户端插件（鲸鱼开关 UI + 媒体内嵌 + 截图/强刷按钮） |
 | `launchers/` | 双击即用的 .bat 模板（启动/关闭/状态） |
 
@@ -88,6 +91,19 @@ node bridge\proxy-bridge.cjs
 ```
 
 建议加入开机自启（启动文件夹放一个 .vbs 或计划任务），详见下文。
+
+### 3.5 桥接自愈看门狗（推荐）
+
+计划任务每 2 分钟探测桥接健康端点，挂了自动拉起。**必须用 VBS 版**（`wscript.exe` 是 GUI 子系统宿主，永远不会创建控制台窗口；Task Scheduler 直接跑 `powershell.exe` 即使带 `-WindowStyle Hidden` 也会每次闪一下黑色窗口）：
+
+```powershell
+$action  = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument '"<本仓库绝对路径>\bridge\bridge-watchdog.vbs"'
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2)
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -Hidden
+Register-ScheduledTask -TaskName 'dsh-bridge-watchdog' -Action $action -Trigger $trigger -Settings $settings -Force
+```
+
+> 可选环境变量：`PROXY_BRIDGE_PORT`（默认 54123）、`NODE_EXE`（node 路径，默认 `node`）、`PROXY_BRIDGE_MEDIA_DIR`（媒体目录，桥接需要时设置）。
 
 ### 4. 安装 DSH 插件
 
