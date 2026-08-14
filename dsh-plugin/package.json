@@ -1,7 +1,7 @@
 {
   "name": "@dsh-external/dsh-client-ui-proxy-toggle",
-  "description": "Clash proxy on/off toggle for the DSH web GUI — a little whale in the top-right corner (green belly = proxy on), hover for a detail panel with node switching. Talks to a local proxy-bridge (127.0.0.1:54123).",
-  "version": "0.1.0",
+  "description": "Clash proxy on/off toggle for the DSH web GUI — a little whale in the top-right corner (green belly = proxy on), hover for a detail panel with node switching. Inline image/video/audio display in chat via the local proxy-bridge (127.0.0.1:54123).",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
