@@ -42,20 +42,47 @@ window.__ModuleLoader__.load({
         "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
       ].join(";");
 
-      // ---------- 截图按钮（鲸鱼左侧） ----------
-      var camBtn = document.createElement("button");
-      camBtn.type = "button";
-      camBtn.setAttribute("data-proxy-toggle", "cam");
-      camBtn.title = "截屏：一键截取当前屏幕，方便发给 AI 查看";
-      camBtn.setAttribute("aria-label", "截屏");
-      camBtn.textContent = "📷";
-      camBtn.style.cssText = [
-        "position:fixed", "top:106px", "right:64px", "z-index:9999",
-        "width:32px", "height:32px", "padding:0", "font-size:15px",
-        "display:flex", "align-items:center", "justify-content:center",
-        "border-radius:10px", "border:1px solid transparent", "cursor:pointer",
-        "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
+      // ---------- 截图按钮（QQ 风格：放在聊天输入框里） ----------
+      var shotBtn = document.createElement("button");
+      shotBtn.type = "button";
+      shotBtn.setAttribute("data-proxy-toggle", "shotbtn");
+      shotBtn.title = "截屏：一键截取当前屏幕，方便发给 AI 查看";
+      shotBtn.setAttribute("aria-label", "截屏");
+      shotBtn.textContent = "📷";
+      shotBtn.style.cssText = [
+        "width:26px", "height:26px", "padding:0", "font-size:14px", "flex:none",
+        "display:inline-flex", "align-items:center", "justify-content:center",
+        "border-radius:7px", "border:1px solid transparent", "cursor:pointer",
+        "background:transparent", "color:var(--dsw-alias-label-secondary,#4a5670)",
+        "transition:background .15s,border-color .15s",
       ].join(";");
+
+      var composerShotMounted = false;
+      function mountComposerShotButton() {
+        if (composerShotMounted) return;
+        var C = document.querySelector("[data-composer-card]");
+        if (!C) {
+          var all = document.querySelectorAll("[class*='composer' i]");
+          for (var i = 0; i < all.length; i++) {
+            var el = all[i];
+            if (el.offsetParent !== null && el.querySelector("textarea")) { C = el; break; }
+          }
+        }
+        if (!C) return;
+        // 插到附件/发送按钮旁边（同一工具行，QQ 风格在左侧）
+        var target = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]") ||
+                     C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
+        if (target && target.parentNode) {
+          target.parentNode.insertBefore(shotBtn, target);
+        } else {
+          C.insertBefore(shotBtn, C.firstChild);
+        }
+        composerShotMounted = true;
+      }
+      function ensureComposerShotButton() {
+        if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
+        mountComposerShotButton();
+      }
 
       function buildWhale(size) {
         var w = size || 33;
@@ -240,7 +267,7 @@ window.__ModuleLoader__.load({
       var shotFloat = document.createElement("div");
       shotFloat.setAttribute("data-proxy-toggle", "shot");
       shotFloat.style.cssText = [
-        "position:fixed", "top:100px", "right:110px", "z-index:9999", "display:none",
+        "position:fixed", "bottom:150px", "right:18px", "z-index:9999", "display:none",
         "width:230px", "padding:10px", "border-radius:12px",
         "background:var(--dsw-alias-bg-module-platform,#ffffff)",
         "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
@@ -412,7 +439,7 @@ window.__ModuleLoader__.load({
       panel.addEventListener("mouseleave", scheduleHide);
       btn.addEventListener("click", toggle);
       pBtn.addEventListener("click", toggle);
-      camBtn.addEventListener("click", takeScreenshot);
+      shotBtn.addEventListener("click", takeScreenshot);
       sel.addEventListener("change", onNodeChange);
       document.addEventListener("click", onClickOutside);
 
@@ -441,6 +468,8 @@ window.__ModuleLoader__.load({
         return el;
       }
       function upgradeMedia() {
+        ensureComposerShotButton();  // 输入框重渲染后恢复截图按钮
+
         // 消息里的媒体链接 [文字](xxx.mp4/mp3) → 内嵌播放器
         document.querySelectorAll("a[href]").forEach(function (a) {
           if (a.dataset.dshMediaDone || !inConversation(a)) return;
@@ -497,7 +526,6 @@ window.__ModuleLoader__.load({
         ].join("");
         document.head.appendChild(style);
         document.body.appendChild(btn);
-        document.body.appendChild(camBtn);
         document.body.appendChild(panel);
         document.body.appendChild(shotFloat);
         document.body.dataset[MARKER] = "1";
@@ -505,13 +533,20 @@ window.__ModuleLoader__.load({
         refresh();
         var timer = setInterval(refresh, POLL_MS);
         var videoObs = startMediaObserver();
+        // 截图按钮挂到输入框（composer），轮询等待输入框出现
+        mountComposerShotButton();
+        var composerTimer = setInterval(function () {
+          mountComposerShotButton();
+          if (composerShotMounted) clearInterval(composerTimer);
+        }, 800);
         ctx.effect(function () {
           return function () {
             clearInterval(timer);
+            clearInterval(composerTimer);
             if (hideTimer) clearTimeout(hideTimer);
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
-            if (camBtn.parentNode) camBtn.parentNode.removeChild(camBtn);
+            if (shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (shotFloat.parentNode) shotFloat.parentNode.removeChild(shotFloat);
             if (style.parentNode) style.parentNode.removeChild(style);
