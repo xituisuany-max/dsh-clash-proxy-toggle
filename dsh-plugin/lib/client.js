@@ -245,7 +245,7 @@ window.__ModuleLoader__.load({
       function takeScreenshot() {
         if (state.shotBusy) return;
         state.shotBusy = true;
-        showShotFloat("截屏中…", null);
+        showShotFloat("📷 请在屏幕上**拖动框选**截图区域（Esc 取消）…", null);
         fetch(BRIDGE + "/screenshot", { method: "POST", cache: "no-store" })
           .then(function (r) { return r.json(); })
           .then(function (d) {
@@ -255,6 +255,8 @@ window.__ModuleLoader__.load({
               shotHint.textContent = "已保存: " + d.file + " —— 直接告诉我「看截图」即可";
               shotBox.style.display = "block";
               showShotFloat(d.file, d.url);
+            } else if (d.cancelled) {
+              showShotFloat("已取消截图", null);
             } else {
               showShotFloat("截屏失败: " + (d.error || "未知错误"), null);
             }

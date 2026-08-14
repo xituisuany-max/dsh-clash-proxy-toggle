@@ -215,7 +215,7 @@ async function setNode(nodeName) {
   return { ok: applied.length > 0, applied };
 }
 
-// 截取整块虚拟屏幕（多显示器合并），保存到 MEDIA_DIR
+// QQ 风格框选截图：弹全屏选区窗口（十字光标、拖动框选、Esc 取消），截取所选区域
 async function takeScreenshot() {
   try {
     fs.mkdirSync(MEDIA_DIR, { recursive: true });
@@ -223,14 +223,28 @@ async function takeScreenshot() {
     const ps =
       "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; " +
       "$vs=[System.Windows.Forms.SystemInformation]::VirtualScreen; " +
-      "$bmp=New-Object System.Drawing.Bitmap $vs.Width,$vs.Height; " +
-      "$g=[System.Drawing.Graphics]::FromImage($bmp); " +
-      "$g.CopyFromScreen($vs.Location,[System.Drawing.Point]::Empty,$vs.Size); " +
-      "$f=Join-Path '" + dir + "' ('screenshot-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.png'); " +
-      "$bmp.Save($f,[System.Drawing.Imaging.ImageFormat]::Png); " +
-      "$g.Dispose(); $bmp.Dispose(); Write-Output $f";
-    const r = await runPowershell(["-Command", ps], true, 20000);
+      "$f=New-Object System.Windows.Forms.Form; " +
+      "$f.FormBorderStyle='None'; $f.Bounds=$vs; $f.StartPosition='Manual'; $f.TopMost=$true; " +
+      "$f.Opacity=0.35; $f.BackColor='Black'; $f.Cursor=[System.Windows.Forms.Cursors]::Cross; " +
+      "$f.ShowInTaskbar=$false; $f.DoubleBuffered=$true; " +
+      "$start=[System.Drawing.Point]::Empty; $cur=[System.Drawing.Point]::Empty; $drawing=$false; $saved=''; " +
+      "$f.add_Paint({param($s,$e) if($drawing){ $pen=New-Object System.Drawing.Pen ([System.Drawing.Color]::Cyan),2; " +
+      "$r=New-Object System.Drawing.Rectangle ([Math]::Min($start.X,$cur.X)),([Math]::Min($start.Y,$cur.Y)),([Math]::Abs($cur.X-$start.X)),([Math]::Abs($cur.Y-$start.Y)); " +
+      "$e.Graphics.DrawRectangle($pen,$r); $pen.Dispose() } }); " +
+      "$f.add_MouseDown({param($s,$e) if($e.Button -eq 'Left'){ $drawing=$true; $start=$e.Location; $cur=$e.Location; $f.Invalidate() } }); " +
+      "$f.add_MouseMove({param($s,$e) if($drawing){ $cur=$e.Location; $f.Invalidate() } }); " +
+      "$f.add_MouseUp({param($s,$e) if(-not $drawing){return} $drawing=$false; " +
+      "$x=[Math]::Min($start.X,$cur.X); $y=[Math]::Min($start.Y,$cur.Y); $w=[Math]::Abs($cur.X-$start.X); $h=[Math]::Abs($cur.Y-$start.Y); " +
+      "if($w -lt 3 -or $h -lt 3){ $f.Close(); return }; " +
+      "$bmp=New-Object System.Drawing.Bitmap $w,$h; $g=[System.Drawing.Graphics]::FromImage($bmp); " +
+      "$g.CopyFromScreen(($vs.X+$x),($vs.Y+$y),0,0,(New-Object System.Drawing.Size($w,$h))); " +
+      "$path=Join-Path '" + dir + "' ('screenshot-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.png'); " +
+      "$bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); $saved=$path; $f.Close() }); " +
+      "$f.add_KeyDown({param($s,$e) if($e.KeyCode -eq 'Escape'){ $f.Close() } }); " +
+      "[void]$f.ShowDialog(); if($saved){ Write-Output $saved } else { Write-Output 'CANCELLED' }";
+    const r = await runPowershell(["-Command", ps], true, 90000); // 等用户框选（最长 90s）
     const out = (r.out || "").trim();
+    if (/CANCELLED/i.test(out)) return { ok: false, cancelled: true, error: "已取消" };
     const m = out.match(/screenshot-\d{8}-\d{6}\.png/);
     if (!m) { log("screenshot failed: " + out.slice(0, 300)); return { ok: false, error: "capture failed: " + out.slice(0, 200) }; }
     const name = m[0];
