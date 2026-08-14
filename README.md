@@ -16,9 +16,17 @@
 
 ---
 
-## 🆕 更新（v0.2.0）
+## 🆕 更新（v0.3.0）
 
 > 完整更新历史见 [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/xituisuany-max/dsh-clash-proxy-toggle/releases)
+
+**v0.3.0** 新增：
+
+- 🎯 **QQ 风格框选截图**：输入框 📷 按钮 → 调起 [Flameshot](https://github.com/flameshot-org/flameshot) 全屏框选（变暗 + 十字光标 + 拖动选区 + 标注工具栏 + 确认 / Esc 取消）
+- 📎 **截图自动进输入框**：框选确认后图片自动作为附件出现在输入框（模拟粘贴 + 剪贴板），回车即发
+- ↻ **顶栏强刷按钮**：纯白样式放在"标准模式"旁边，一键清缓存重载（等价 Ctrl+F5，加载插件最新代码）
+- 🛡️ **桥接自愈看门狗**：每 2 分钟自检，桥接服务挂了自动拉起
+- 🎨 **按钮样式统一**：截图按钮运行时复制旁边圆形按钮的尺寸/边框，明暗主题自适应
 
 **v0.2.0** 新增：
 
@@ -41,14 +49,17 @@
 - **明暗主题自适应**：使用 DSH 的 `--dsw-alias-*` 主题变量，与 DeepSeek Harness UI 风格一致
 - **对话内媒体直出**：生成的图片/视频/音频（输出到 `outputs/imagegen`）可直接在对话框内联显示——图片即看即显、mp4/webm 自动升级为内嵌播放器、mp3/wav 等自动升级为音频播放条（通过桥接 `/media` 通道）
 - **视频/音频内嵌**：对话消息里的 `.mp4/.webm/.mov` 链接自动变内嵌视频播放器，`.mp3/.wav/.ogg/.m4a/.aac/.flac/.opus` 自动变音频播放器
+- **QQ 式框选截图**：输入框 📷 一键截屏（Flameshot），截图自动进输入框
+- **一键强刷**：顶栏 ↻ 按钮清缓存重载，加载插件最新代码
+- **桥接自愈**：看门狗自动拉起掉线的桥接服务
 
 ## 🧩 组成
 
 | 模块 | 说明 |
 |---|---|
 | `clash.ps1` | Clash 代理管理脚本（启动/停止/换节点/自检/接管） |
-| `bridge/proxy-bridge.cjs` | 本地 HTTP 桥接服务（127.0.0.1:54123），供 GUI 插件调用 |
-| `dsh-plugin/` | DeepSeek Harness 客户端插件（鲸鱼开关 UI） |
+| `bridge/proxy-bridge.cjs` | 本地 HTTP 桥接服务（127.0.0.1:54123），供 GUI 插件调用（状态/节点/媒体/截图） |
+| `dsh-plugin/` | DeepSeek Harness 客户端插件（鲸鱼开关 UI + 媒体内嵌 + 截图/强刷按钮） |
 | `launchers/` | 双击即用的 .bat 模板（启动/关闭/状态） |
 
 ## 🚀 安装
@@ -57,6 +68,7 @@
 
 - Windows + PowerShell 5.1+ / 7
 - [Clash for Windows](https://github.com/Fndroid/clash_for_windows_pkg)（或其他 clash 内核）已安装并导入订阅
+- **Flameshot**（QQ 式截图依赖）：`winget install Flameshot.Flameshot`（可用环境变量 `FLAMESHOT_EXE` 指定路径）
 - DeepSeek Harness Desktop（Web GUI）
 
 ### 2. 配置路径
