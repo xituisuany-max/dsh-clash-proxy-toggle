@@ -163,20 +163,21 @@ window.__ModuleLoader__.load({
         var plusBtn = null;
         for (var bi = 0; bi < allBtns.length; bi++) { if (isPlusBtn(allBtns[bi])) { plusBtn = allBtns[bi]; break; } }
         diag("plus found=" + !!plusBtn + " totalBtns=" + allBtns.length);
-        if (plusBtn && plusBtn.parentNode) {
-          var row = plusBtn.parentNode;
-          var rowBtns = row.querySelectorAll("button");
-          var idx = -1;
-          for (var r = 0; r < rowBtns.length; r++) { if (rowBtns[r] === plusBtn) { idx = r; break; } }
-          // 插到"+"之后的下一个按钮（盾牌）旁边
-          var styleSrc = plusBtn;
-          if (idx >= 0 && rowBtns[idx + 1]) {
-            rowBtns[idx + 1].insertAdjacentElement("afterend", shotBtn);
-            styleSrc = rowBtns[idx + 1];
+        if (plusBtn) {
+          // 按文档顺序找"+"之后的下一个按钮（即盾牌），插到它右边
+          var all2 = C.querySelectorAll("button");
+          var shieldBtn = null;
+          for (var q = 0; q < all2.length; q++) {
+            if (all2[q] === plusBtn) { shieldBtn = all2[q + 1] || null; break; }
+          }
+          if (shieldBtn) {
+            shieldBtn.insertAdjacentElement("afterend", shotBtn);
+            copyButtonStyle(shieldBtn, shotBtn);
+            diag("shot placed after shield: " + (shieldBtn.textContent || "").trim().slice(0, 10));
           } else {
             plusBtn.insertAdjacentElement("afterend", shotBtn);
+            copyButtonStyle(plusBtn, shotBtn);
           }
-          copyButtonStyle(styleSrc, shotBtn);
         } else {
           // 没有"+"：插到第一个圆形小按钮后面并复制其样式
           var anchor = null;
