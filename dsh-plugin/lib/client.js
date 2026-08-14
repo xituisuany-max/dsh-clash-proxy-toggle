@@ -218,8 +218,7 @@ window.__ModuleLoader__.load({
       function takeScreenshot() {
         if (state.shotBusy) return;
         state.shotBusy = true;
-        shotHint.textContent = "截屏中…";
-        shotBox.style.display = "block";
+        showShotFloat("截屏中…", null);
         fetch(BRIDGE + "/screenshot", { method: "POST", cache: "no-store" })
           .then(function (r) { return r.json(); })
           .then(function (d) {
@@ -228,12 +227,49 @@ window.__ModuleLoader__.load({
               shotImg.src = d.url + "?t=" + Date.now();
               shotHint.textContent = "已保存: " + d.file + " —— 直接告诉我「看截图」即可";
               shotBox.style.display = "block";
+              showShotFloat(d.file, d.url);
             } else {
-              shotHint.textContent = "截屏失败: " + (d.error || "未知错误");
+              showShotFloat("截屏失败: " + (d.error || "未知错误"), null);
             }
           })
-          .catch(function () { shotHint.textContent = "截屏失败：桥接不可用"; })
+          .catch(function () { showShotFloat("截屏失败：桥接不可用", null); })
           .then(function () { state.shotBusy = false; });
+      }
+
+      // 独立的浮动截图反馈（不依赖悬停面板，点 📷 后立刻可见）
+      var shotFloat = document.createElement("div");
+      shotFloat.setAttribute("data-proxy-toggle", "shot");
+      shotFloat.style.cssText = [
+        "position:fixed", "top:100px", "right:110px", "z-index:9999", "display:none",
+        "width:230px", "padding:10px", "border-radius:12px",
+        "background:var(--dsw-alias-bg-module-platform,#ffffff)",
+        "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
+        "box-shadow:0 12px 32px rgba(0,0,0,.22)",
+        "font:12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif",
+        "color:var(--dsw-alias-label-primary,#1c2333)",
+      ].join(";");
+      var shotFloatImg = document.createElement("img");
+      shotFloatImg.style.cssText = "max-width:100%;border-radius:8px;display:block;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.3));";
+      shotFloatImg.title = "点击查看大图";
+      shotFloatImg.addEventListener("click", function () { if (shotFloatImg.src) window.open(shotFloatImg.src.split("?")[0], "_blank"); });
+      var shotFloatText = document.createElement("div");
+      shotFloatText.style.cssText = "margin-top:6px;word-break:break-all;";
+      var shotFloatClose = document.createElement("button");
+      shotFloatClose.type = "button";
+      shotFloatClose.textContent = "✕ 关闭";
+      shotFloatClose.style.cssText = "margin-top:8px;padding:4px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35));background:transparent;color:var(--dsw-alias-label-secondary,#4a5670);cursor:pointer;font-size:11px;";
+      shotFloatClose.addEventListener("click", function () { shotFloat.style.display = "none"; });
+      shotFloat.append(shotFloatImg, shotFloatText, shotFloatClose);
+
+      function showShotFloat(text, imgUrl) {
+        if (imgUrl) {
+          shotFloatImg.src = imgUrl + "?t=" + Date.now();
+          shotFloatImg.style.display = "block";
+        } else {
+          shotFloatImg.style.display = "none";
+        }
+        shotFloatText.textContent = text;
+        shotFloat.style.display = "block";
       }
 
       // ---------- 渲染 ----------
@@ -463,6 +499,7 @@ window.__ModuleLoader__.load({
         document.body.appendChild(btn);
         document.body.appendChild(camBtn);
         document.body.appendChild(panel);
+        document.body.appendChild(shotFloat);
         document.body.dataset[MARKER] = "1";
         render();
         refresh();
@@ -476,6 +513,7 @@ window.__ModuleLoader__.load({
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (camBtn.parentNode) camBtn.parentNode.removeChild(camBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
+            if (shotFloat.parentNode) shotFloat.parentNode.removeChild(shotFloat);
             if (style.parentNode) style.parentNode.removeChild(style);
             delete document.body.dataset[MARKER];
           };
