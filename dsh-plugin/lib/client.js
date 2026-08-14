@@ -42,6 +42,21 @@ window.__ModuleLoader__.load({
         "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
       ].join(";");
 
+      // ---------- 截图按钮（鲸鱼左侧） ----------
+      var camBtn = document.createElement("button");
+      camBtn.type = "button";
+      camBtn.setAttribute("data-proxy-toggle", "cam");
+      camBtn.title = "截屏：一键截取当前屏幕，方便发给 AI 查看";
+      camBtn.setAttribute("aria-label", "截屏");
+      camBtn.textContent = "📷";
+      camBtn.style.cssText = [
+        "position:fixed", "top:106px", "right:64px", "z-index:9999",
+        "width:32px", "height:32px", "padding:0", "font-size:15px",
+        "display:flex", "align-items:center", "justify-content:center",
+        "border-radius:10px", "border:1px solid transparent", "cursor:pointer",
+        "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
+      ].join(";");
+
       function buildWhale(size) {
         var w = size || 33;
         var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -187,6 +202,40 @@ window.__ModuleLoader__.load({
       ].join(";");
       panel.append(selBox, pBtn);
 
+      // ---------- 截图预览区 ----------
+      var shotBox = document.createElement("div");
+      shotBox.style.cssText = "display:none;margin:10px 12px 0;";
+      var shotImg = document.createElement("img");
+      shotImg.style.cssText = "max-width:100%;border-radius:8px;border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35));display:block;cursor:zoom-in;";
+      shotImg.title = "点击查看大图";
+      shotImg.addEventListener("click", function () { if (shotImg.src) window.open(shotImg.src, "_blank"); });
+      var shotHint = document.createElement("div");
+      shotHint.style.cssText = "font-size:11px;color:var(--dsw-alias-label-tertiary,#77839c);margin-top:4px;";
+      shotBox.append(shotImg, shotHint);
+      panel.append(shotBox);
+
+      // ---------- 截屏 ----------
+      function takeScreenshot() {
+        if (state.shotBusy) return;
+        state.shotBusy = true;
+        shotHint.textContent = "截屏中…";
+        shotBox.style.display = "block";
+        fetch(BRIDGE + "/screenshot", { method: "POST", cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.ok) {
+              state.lastShot = d;
+              shotImg.src = d.url + "?t=" + Date.now();
+              shotHint.textContent = "已保存: " + d.file + " —— 直接告诉我「看截图」即可";
+              shotBox.style.display = "block";
+            } else {
+              shotHint.textContent = "截屏失败: " + (d.error || "未知错误");
+            }
+          })
+          .catch(function () { shotHint.textContent = "截屏失败：桥接不可用"; })
+          .then(function () { state.shotBusy = false; });
+      }
+
       // ---------- 渲染 ----------
       function render() {
         // 徽章
@@ -327,6 +376,7 @@ window.__ModuleLoader__.load({
       panel.addEventListener("mouseleave", scheduleHide);
       btn.addEventListener("click", toggle);
       pBtn.addEventListener("click", toggle);
+      camBtn.addEventListener("click", takeScreenshot);
       sel.addEventListener("change", onNodeChange);
       document.addEventListener("click", onClickOutside);
 
@@ -411,6 +461,7 @@ window.__ModuleLoader__.load({
         ].join("");
         document.head.appendChild(style);
         document.body.appendChild(btn);
+        document.body.appendChild(camBtn);
         document.body.appendChild(panel);
         document.body.dataset[MARKER] = "1";
         render();
@@ -423,6 +474,7 @@ window.__ModuleLoader__.load({
             if (hideTimer) clearTimeout(hideTimer);
             if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
+            if (camBtn.parentNode) camBtn.parentNode.removeChild(camBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (style.parentNode) style.parentNode.removeChild(style);
             delete document.body.dataset[MARKER];

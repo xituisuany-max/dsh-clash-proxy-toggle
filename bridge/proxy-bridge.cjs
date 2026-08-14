@@ -215,6 +215,33 @@ async function setNode(nodeName) {
   return { ok: applied.length > 0, applied };
 }
 
+// 截取整块虚拟屏幕（多显示器合并），保存到 MEDIA_DIR
+async function takeScreenshot() {
+  try {
+    fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    const dir = MEDIA_DIR.replace(/'/g, "''");
+    const ps =
+      "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; " +
+      "$vs=[System.Windows.Forms.SystemInformation]::VirtualScreen; " +
+      "$bmp=New-Object System.Drawing.Bitmap $vs.Width,$vs.Height; " +
+      "$g=[System.Drawing.Graphics]::FromImage($bmp); " +
+      "$g.CopyFromScreen($vs.Location,[System.Drawing.Point]::Empty,$vs.Size); " +
+      "$f=Join-Path '" + dir + "' ('screenshot-'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'.png'); " +
+      "$bmp.Save($f,[System.Drawing.Imaging.ImageFormat]::Png); " +
+      "$g.Dispose(); $bmp.Dispose(); Write-Output $f";
+    const r = await runPowershell(["-Command", ps], true, 20000);
+    const out = (r.out || "").trim();
+    const m = out.match(/screenshot-\d{8}-\d{6}\.png/);
+    if (!m) { log("screenshot failed: " + out.slice(0, 300)); return { ok: false, error: "capture failed: " + out.slice(0, 200) }; }
+    const name = m[0];
+    const full = path.join(MEDIA_DIR, name);
+    return { ok: true, file: name, url: "http://127.0.0.1:" + BRIDGE_PORT + "/media/" + encodeURIComponent(name), path: full, size: fs.existsSync(full) ? fs.statSync(full).size : 0 };
+  } catch (e) {
+    log("screenshot error: " + (e && e.stack || e));
+    return { ok: false, error: String(e && e.message || e) };
+  }
+}
+
 function json(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, {
@@ -288,6 +315,10 @@ const server = http.createServer((req, res) => {
         if (!payload.node) return json(res, 400, { ok: false, error: "missing node" });
         log("switch node: " + payload.node);
         return json(res, 200, await setNode(payload.node));
+      }
+      if (req.method === "POST" && route === "/screenshot") {
+        log("screenshot requested");
+        return json(res, 200, await takeScreenshot());
       }
       return json(res, 404, { ok: false, error: "not found" });
     } catch (e) {
