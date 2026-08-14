@@ -164,6 +164,24 @@ window.__ModuleLoader__.load({
         if (fallbackMounted && shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
         fallbackMounted = false;
         var clickables = C.querySelectorAll("button, [role='button']");
+        // 结构转储：把输入框附近的元素顺序发给诊断日志，便于精确定位
+        try {
+          var dump = [];
+          var cands = C.querySelectorAll("button, [role='button'], [class*='mode' i], [class*='shield' i], [aria-label]");
+          for (var dd = 0; dd < Math.min(cands.length, 30); dd++) {
+            var ce = cands[dd];
+            dump.push("#" + dd + " " + ce.tagName + "." + String(ce.className || "").slice(0, 22) + " aria=" + (ce.getAttribute && (ce.getAttribute("aria-label") || "")) + " txt=" + (ce.textContent || "").trim().slice(0, 10));
+          }
+          var plusEl = null;
+          for (var pe = 0; pe < clickables.length; pe++) { if (isPlusBtn(clickables[pe])) { plusEl = clickables[pe]; break; } }
+          if (plusEl && plusEl.parentNode) {
+            var sibs = plusEl.parentNode.children;
+            var chain = [];
+            for (var ss = 0; ss < sibs.length; ss++) chain.push(sibs[ss].tagName + "." + String(sibs[ss].className || "").slice(0, 14));
+            dump.push("PLUS-SIBLINGS: " + chain.join(" | "));
+          }
+          diag("STRUCTURE: " + dump.join(" ;; "));
+        } catch (e) {}
         // 1) 优先：找到盾牌 → 插到它右边
         var shield = null;
         for (var s = 0; s < clickables.length; s++) { if (isShieldBtn(clickables[s])) { shield = clickables[s]; break; } }
