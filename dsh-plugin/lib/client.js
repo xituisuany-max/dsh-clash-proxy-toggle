@@ -50,13 +50,14 @@ window.__ModuleLoader__.load({
       shotBtn.setAttribute("aria-label", "截屏");
       // 矢量相机图标（保证任何系统都正常显示，不依赖 emoji 字体）
       shotBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
-      shotBtn.style.cssText = [
+      var SHOTBTN_INLINE = [
         "width:26px", "height:26px", "padding:0", "flex:none",
         "display:inline-flex", "align-items:center", "justify-content:center",
         "border-radius:7px", "border:1px solid transparent", "cursor:pointer",
         "background:transparent", "color:var(--dsw-alias-label-secondary,#4a5670)",
         "transition:background .15s,border-color .15s",
       ].join(";");
+      shotBtn.style.cssText = SHOTBTN_INLINE;
 
       function findComposer() {
         var C = document.querySelector("[data-composer-card]");
@@ -64,12 +65,28 @@ window.__ModuleLoader__.load({
           var all = document.querySelectorAll("[class*='composer' i]");
           for (var i = 0; i < all.length; i++) {
             var el = all[i];
-            if (el.offsetParent !== null && el.querySelector("textarea")) { C = el; break; }
+            if (el.offsetParent !== null &&
+                (el.querySelector("textarea") || el.querySelector("[contenteditable='true']") || el.querySelector("[data-input-mirror]"))) {
+              C = el; break;
+            }
+          }
+        }
+        if (!C) {
+          // 更宽泛：直接找输入元素，向上找含附件/发送按钮的容器
+          var input = document.querySelector("[contenteditable='true']") || document.querySelector("textarea");
+          if (input) {
+            var up = input.parentElement;
+            for (var k = 0; k < 5 && up; k++) {
+              if (up.querySelector("[class*='attach' i], [class*='send' i], [title*='发送'], [title*='附件']")) { C = up; break; }
+              up = up.parentElement;
+            }
+            if (!C) C = input.closest("[data-composer-card], [class*='composer' i]") || input.parentElement;
           }
         }
         return C;
       }
       var composerShotMounted = false;
+      var fallbackMounted = false;
       function diag(msg) {
         try { fetch(BRIDGE + "/debug", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: msg }), cache: "no-store" }).catch(function () {}); } catch (e) {}
       }
@@ -78,7 +95,11 @@ window.__ModuleLoader__.load({
         var C = findComposer();
         diag("mount attempt: composer=" + !!C);
         if (!C) return;
-        var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]");
+        // 若在兜底位置，先移出并恢复行内样式
+        if (fallbackMounted && shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
+        fallbackMounted = false;
+        shotBtn.style.cssText = SHOTBTN_INLINE;
+        var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i], [aria-label*='upload' i], [class*='upload' i]");
         diag("attach found=" + !!attach + " parent=" + (attach && attach.parentNode ? (attach.parentNode.className || attach.parentNode.tagName) : "-"));
         if (attach && attach.parentNode) {
           // 紧跟附件按钮之后插入（红圈位置，保证可见）
@@ -89,29 +110,30 @@ window.__ModuleLoader__.load({
           else C.insertBefore(shotBtn, C.firstChild);
         }
         composerShotMounted = true;
-        diag("mounted, position ok, connected=" + shotBtn.isConnected);
+        diag("mounted in composer, connected=" + shotBtn.isConnected);
       }
-      // 兜底：若输入框一直找不到，10 秒后放到左下角（永远可见可用）
+      // 兜底：20 秒后若仍未挂进输入框，放左下角；一旦找到输入框会自动移进去
+      var fallbackTicks = 0;
       var fallbackTimer = setInterval(function () {
-        if (!composerShotMounted && document.body) {
-          diag("fallback: composer not found after wait");
-          if (!shotBtn.isConnected) {
-            shotBtn.style.cssText = [
-              "position:fixed", "left:14px", "bottom:14px", "z-index:9999",
-              "width:32px", "height:32px", "padding:0",
-              "display:flex", "align-items:center", "justify-content:center",
-              "border-radius:10px", "cursor:pointer",
-              "background:var(--dsw-alias-bg-module-platform,rgba(255,255,255,.9))",
-              "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
-              "color:var(--dsw-alias-label-secondary,#4a5670)",
-            ].join(";");
-            document.body.appendChild(shotBtn);
-            composerShotMounted = true;
-            diag("fallback mounted floating");
-          }
+        if (composerShotMounted) { clearInterval(fallbackTimer); return; }
+        fallbackTicks++;
+        if (fallbackTicks < 20) return;
+        if (!fallbackMounted && document.body && !shotBtn.isConnected) {
+          diag("fallback floating mounted (composer still not found)");
+          shotBtn.style.cssText = [
+            "position:fixed", "left:14px", "bottom:14px", "z-index:9999",
+            "width:32px", "height:32px", "padding:0",
+            "display:flex", "align-items:center", "justify-content:center",
+            "border-radius:10px", "cursor:pointer",
+            "background:var(--dsw-alias-bg-module-platform,rgba(255,255,255,.9))",
+            "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
+            "color:var(--dsw-alias-label-secondary,#4a5670)",
+          ].join(";");
+          document.body.appendChild(shotBtn);
+          fallbackMounted = true;
         }
       }, 1000);
-      var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 12000);
+      var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 25000);
 
       function ensureComposerShotButton() {
         if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
