@@ -1,0 +1,6 @@
+# dsh-pet bundle patch: inserts its public dsh.client entry into the web plugin roster.
+# Install by adding the package to the profile's package.json dsh.profile.bundles
+# (and linking node_modules), same as the other @dsh-external client plugins.
+- insert:
+    - id: ui-pet
+      name: '@dsh-external/dsh-client-ui-pet'

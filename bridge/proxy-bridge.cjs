@@ -260,7 +260,15 @@ function json(res, code, obj) {
 
 // 本地媒体文件（用于在对话里展示生成的图片等）
 function serveMedia(res, name) {
-  const safe = path.basename(name); // 防目录穿越
+  // 桌宠序列帧放行子目录（pet/<action>_<n>/<frame>.png），其余仍防目录穿越
+  let safe;
+  if (name.startsWith("pet/")) {
+    const normalized = path.normalize(name).replace(/\\/g, "/");
+    if (normalized.startsWith("pet/") && !normalized.includes("..")) safe = normalized;
+    else safe = path.basename(name);
+  } else {
+    safe = path.basename(name);
+  }
   const file = path.join(MEDIA_DIR, safe);
   fs.readFile(file, (err, data) => {
     if (err) {
