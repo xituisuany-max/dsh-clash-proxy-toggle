@@ -65,8 +65,17 @@ window.__ModuleLoader__.load({
       refBtn.setAttribute("data-proxy-toggle", "refbtn");
       refBtn.title = "强制刷新页面（等价 Ctrl+F5，加载插件最新代码）";
       refBtn.setAttribute("aria-label", "强制刷新");
-      refBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
-      refBtn.style.cssText = SHOTBTN_INLINE;
+      refBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+      // 纯白样式（顶栏深色背景上醒目）
+      var REFBTN_INLINE = [
+        "width:26px", "height:26px", "padding:0", "flex:none",
+        "display:inline-flex", "align-items:center", "justify-content:center",
+        "border-radius:7px", "cursor:pointer",
+        "color:#ffffff", "background:rgba(255,255,255,.14)",
+        "border:1px solid rgba(255,255,255,.30)",
+        "transition:background .15s,border-color .15s",
+      ].join(";");
+      refBtn.style.cssText = REFBTN_INLINE;
       refBtn.addEventListener("click", hardRefresh);
 
       function hardRefresh() {
@@ -203,7 +212,7 @@ window.__ModuleLoader__.load({
           }
         }
         if (target) {
-          refBtn.style.cssText = SHOTBTN_INLINE;
+          refBtn.style.cssText = REFBTN_INLINE;
           target.insertAdjacentElement("afterend", refBtn);
           refMountedTop = true;
           diag("ref mounted next to innermost: " + (target.textContent || "").trim().slice(0, 12) + " tag=" + target.tagName);
@@ -650,6 +659,8 @@ window.__ModuleLoader__.load({
           "[data-proxy-toggle='select']:focus-visible{outline:2px solid rgba(77,107,254,.5);outline-offset:0}",
           "[data-proxy-toggle='pbtn']:not(:disabled):hover{filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}",
           "[data-proxy-toggle='pbtn']:not(:disabled):active{transform:translateY(0);filter:brightness(.96)}",
+          "[data-proxy-toggle='refbtn']:hover{background:rgba(255,255,255,.32);border-color:rgba(255,255,255,.55)}",
+          "[data-proxy-toggle='shotbtn']:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.07));border-color:var(--dsw-alias-border-l2,rgba(120,130,150,.35))}",
         ].join("");
         document.head.appendChild(style);
         document.body.appendChild(btn);
