@@ -1,0 +1,5 @@
+@echo off
+chcp 65001 >nul
+rem 启动 Clash 代理（日本节点）+ 打开系统代理。窗口保持打开即代表代理在运行，可最小化。
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\clash.ps1" -SystemProxy
+pause

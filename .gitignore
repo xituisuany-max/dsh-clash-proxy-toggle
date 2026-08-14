@@ -1,0 +1,22 @@
+# 运行时
+.clash-run/
+*.log
+
+# 本机配置（含真实路径/订阅信息）
+config.env
+*.env
+!config.example
+
+# 订阅数据（含节点密码/token，绝不要提交）
+data/
+profiles/
+list.yml
+
+# Node
+node_modules/
+
+# 系统/编辑器
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/

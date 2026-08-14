@@ -1,0 +1,10 @@
+# 统一换行符（PowerShell/批处理用 CRLF，其他用 LF）
+* text=auto
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cjs text eol=lf
+*.js text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.png binary

@@ -1,0 +1,5 @@
+@echo off
+chcp 65001 >nul
+rem 关闭代理并自动恢复系统代理设置（整机回到直连）。
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\clash.ps1" -Stop
+pause

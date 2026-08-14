@@ -1,0 +1,5 @@
+@echo off
+chcp 65001 >nul
+rem 查看当前状态、节点、可用订阅。
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\clash.ps1" -Status
+pause

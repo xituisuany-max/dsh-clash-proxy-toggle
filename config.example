@@ -1,0 +1,18 @@
+# ============================================
+# dsh-clash-proxy-toggle 配置模板
+# 用法：复制本文件为 config.env 并填入你的值。
+# config.env 已被 .gitignore 忽略，不会提交。
+# ============================================
+
+# Clash for Windows 应用根目录（clash-win64.exe 所在应用的目录，含 resources\data\profiles）
+# 例如：CLASH_APP_DIR=D:\Apps\Clash.for.Windows
+CLASH_APP_DIR=
+
+# 可选：桥接服务监听端口（默认 54123）
+# PROXY_BRIDGE_PORT=54123
+
+# 可选：覆盖 clash.ps1 路径（默认本仓库根目录 clash.ps1）
+# CLASH_PS1=
+
+# 可选：覆盖托管核心 pid 文件路径（默认本仓库 .clash-run/clash.pid）
+# CLASH_PID_FILE=

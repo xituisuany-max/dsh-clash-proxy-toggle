@@ -1,0 +1,117 @@
+<div align="center">
+
+# 🐋 dsh-clash-proxy-toggle
+
+**DeepSeek Harness Web GUI 的 Clash 代理开关** — 右上角一只小鲸鱼，肚子变绿就是代理开着。
+
+| 开启（绿肚子） | 关闭（无颜色） |
+|---|---|
+| ![on](docs/whale-on.png) | ![off](docs/whale-off.png) |
+
+悬停鲸鱼弹出详情面板：节点 / 延迟 / 系统代理状态、切换节点、一键启停。
+
+</div>
+
+---
+
+## ✨ 特性
+
+- **一键启停**：点击右上角鲸鱼即可开关 Clash 代理（可配合 Windows 系统代理）
+- **状态一目了然**：鲸鱼肚子 **绿色 = 开启**、无颜色 = 关闭、琥珀色 = 桥接离线
+- **详情面板**：悬停显示当前节点、实时延迟（毫秒）、系统代理状态，内置 **46+ 节点切换**
+- **自动换活节点**：节点失效时自动扫描并按真实 HTTPS 连通性切换
+- **自动接管**：端口被坏配置/直连占用时自动终止并接管
+- **用完自动关闭**：命令行模式执行完命令自动停止并恢复系统代理
+- **明暗主题自适应**：使用 DSH 的 `--dsw-alias-*` 主题变量，与 DeepSeek Harness UI 风格一致
+
+## 🧩 组成
+
+| 模块 | 说明 |
+|---|---|
+| `clash.ps1` | Clash 代理管理脚本（启动/停止/换节点/自检/接管） |
+| `bridge/proxy-bridge.cjs` | 本地 HTTP 桥接服务（127.0.0.1:54123），供 GUI 插件调用 |
+| `dsh-plugin/` | DeepSeek Harness 客户端插件（鲸鱼开关 UI） |
+| `launchers/` | 双击即用的 .bat 模板（启动/关闭/状态） |
+
+## 🚀 安装
+
+### 1. 前置
+
+- Windows + PowerShell 5.1+ / 7
+- [Clash for Windows](https://github.com/Fndroid/clash_for_windows_pkg)（或其他 clash 内核）已安装并导入订阅
+- DeepSeek Harness Desktop（Web GUI）
+
+### 2. 配置路径
+
+复制 `config.example` 为 `config.env`，填入你的 Clash 应用目录：
+
+```ini
+CLASH_APP_DIR=D:\Apps\Clash.for.Windows
+```
+
+> 也可用环境变量 `CLASH_APP_DIR` 代替。
+
+### 3. 启动桥接服务（GUI 开关依赖）
+
+```bat
+node bridge\proxy-bridge.cjs
+```
+
+建议加入开机自启（启动文件夹放一个 .vbs 或计划任务），详见下文。
+
+### 4. 安装 DSH 插件
+
+将 `dsh-plugin` 目录注册为 web profile 的插件包（二选一）：
+
+```powershell
+# 方式 A：通过 dsh 命令行（推荐，支持 git 地址）
+dsh plugin --profile web add https://github.com/<你的账号>/dsh-clash-proxy-toggle
+
+# 方式 B：手动注册
+# 在 harness-home\profiles\web\package.json 的 dependencies 加入：
+#   "@dsh-external/dsh-client-ui-proxy-toggle": "file:<本仓库>\dsh-plugin"
+# 并把它追加到 dsh.profile.bundles 列表，然后重启 DeepSeek Harness Desktop
+```
+
+> 插件客户端默认连接 `http://127.0.0.1:54123`，可在页面注入 `window.__DSH_PROXY_BRIDGE__` 覆盖。
+
+### 5. 命令行用法（不装插件也能用）
+
+```powershell
+.\clash.ps1 -Command "node fetch.js"          # 启动→执行→自动关闭
+.\clash.ps1 -ProxyTest https://www.google.com/generate_204   # 自检后关闭
+.\clash.ps1 -SystemProxy                        # 常驻 + 开启系统代理（Ctrl+C 或另开终端 -Stop）
+.\clash.ps1 -Profile 1 -Node "香港 · 01"       # 指定订阅/节点
+.\clash.ps1 -Region 日本                        # 自动换活节点时优先日本
+.\clash.ps1 -Status / -Stop
+```
+
+`launchers\` 里的 `.bat.example` 改名为 `.bat` 后双击即用（路径自动解析，可放任意位置）。
+
+## ⚙️ 工作原理
+
+```
+┌─────────────────────────┐        ┌──────────────────────────┐
+│  DSH Web GUI (浏览器)    │  HTTP  │  bridge/proxy-bridge.cjs │
+│  右上角鲸鱼插件          │ ─────► │  127.0.0.1:54123          │
+│  fetch /status /start…   │        └────────────┬─────────────┘
+└─────────────────────────┘                     │ spawn powershell
+                                                ▼
+                                       clash.ps1（启动/停止/换节点）
+                                                │
+                                                ▼
+                                    clash-win64 核心（订阅配置在 CLASH_APP_DIR\data）
+```
+
+- 插件每 2 秒轮询 `/status`，Agent 或命令行操作后界面自动同步
+- `clash.ps1` 通过 Clash external-controller API（UTF-8）切换节点、扫描活节点
+
+## 🔒 安全说明
+
+- 本仓库**不含任何订阅数据**：节点密码、订阅 token 等在你的 `CLASH_APP_DIR\data` 里，请勿提交
+- `config.env`、`.clash-run/`、`*.yml` 订阅文件已在 `.gitignore` 中排除
+- 桥接服务仅监听 `127.0.0.1`，不对外暴露
+
+## 📄 License
+
+[MIT](LICENSE)
