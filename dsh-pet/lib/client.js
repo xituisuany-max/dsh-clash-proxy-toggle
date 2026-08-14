@@ -65,6 +65,32 @@ window.__ModuleLoader__.load({
       var lastRunning = false;
       var lastErrorSeqs = [];
       var sessionUnsub = null;
+      // 空闲检测：长时间无用户指令 -> 困困
+      var IDLE_MS = 90 * 1000;          // 90 秒无指令视为空闲
+      var IDLE_CHECK_MS = 5000;         // 每 5 秒检查一次
+      var lastUserActivity = Date.now();
+      var lastUserNodeCount = 0;
+      var idleTimer = null;
+      function countUserNodes(nodes) {
+        var c = 0;
+        for (var i = 0; i < nodes.length; i++) {
+          if (nodes[i] && nodes[i].kind === "user") c++;
+        }
+        return c;
+      }
+      function startIdleCheck() {
+        if (idleTimer) clearInterval(idleTimer);
+        idleTimer = setInterval(function () {
+          try {
+            var now = Date.now();
+            if (now - lastUserActivity > IDLE_MS && !lastRunning && currentAction !== "sleep") {
+              dbg("idle -> sleep");
+              playAction("sleep");
+              showBubbleText("没人理我…先睡会儿 Zzz", 2600);
+            }
+          } catch (e) { dbg("idle err: " + e.message); }
+        }, IDLE_CHECK_MS);
+      }
       function hookSession(s) {
         if (!s || typeof s.subscribe !== "function") { dbg("no session face"); return; }
         if (sessionUnsub) { try { sessionUnsub(); } catch (e) {} sessionUnsub = null; }
@@ -75,6 +101,18 @@ window.__ModuleLoader__.load({
             if (!snap) return;
             var running = !!snap.running;
             var nodes = snap.nodes || [];
+            // 用户活动检测：user 节点数增加 = 用户发了新指令
+            var userCount = countUserNodes(nodes);
+            if (userCount > lastUserNodeCount) {
+              lastUserActivity = Date.now();
+              dbg("user activity, reset idle");
+              // 若正在睡觉则唤醒回 idle
+              if (currentAction === "sleep") {
+                playAction("idle");
+                showBubbleText("嗯？主人叫我~", 1800);
+              }
+            }
+            lastUserNodeCount = userCount;
             // 出错检测：turn-error 或 tool-result.error 或 command outcome error
             var hasError = false;
             for (var i = 0; i < nodes.length; i++) {
@@ -356,6 +394,7 @@ window.__ModuleLoader__.load({
         document.addEventListener("visibilitychange", onLeave);
         window.addEventListener("blur", onBlur);
         hookSessions();
+        startIdleCheck();
       }
       mount();
 
@@ -365,6 +404,7 @@ window.__ModuleLoader__.load({
           if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
           if (style.parentNode) style.parentNode.removeChild(style);
           if (sessionUnsub) { try { sessionUnsub(); } catch (e) {} sessionUnsub = null; }
+          if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
           document.removeEventListener("visibilitychange", onLeave);
           window.removeEventListener("blur", onBlur);
           delete document.body.dataset[MARKER];
