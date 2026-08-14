@@ -20,3 +20,7 @@ Thumbs.db
 .DS_Store
 .idea/
 .vscode/
+
+# 本地输出（图片等）
+outputs/
+

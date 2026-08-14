@@ -33,6 +33,7 @@ const PID_FILE = process.env.CLASH_PID_FILE || path.join(RUN_DIR, "clash.pid");
 const SCRIPT_PID_FILE = path.join(RUN_DIR, "clash-script.pid");
 const REG_PATH = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const LOG_FILE = path.join(__dirname, "bridge.log");
+const MEDIA_DIR = process.env.PROXY_BRIDGE_MEDIA_DIR || path.join(__dirname, "..", "outputs", "imagegen");
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -226,6 +227,32 @@ function json(res, code, obj) {
   res.end(body);
 }
 
+// 本地媒体文件（用于在对话里展示生成的图片等）
+function serveMedia(res, name) {
+  const safe = path.basename(name); // 防目录穿越
+  const file = path.join(MEDIA_DIR, safe);
+  fs.readFile(file, (err, data) => {
+    if (err) {
+      res.writeHead(404, { "Access-Control-Allow-Origin": "*" });
+      return res.end("not found");
+    }
+    const ext = path.extname(file).toLowerCase();
+    const mime = {
+      ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif",
+      ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".m4v": "video/mp4",
+      ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".oga": "audio/ogg",
+      ".m4a": "audio/mp4", ".aac": "audio/aac", ".flac": "audio/flac", ".opus": "audio/ogg",
+    }[ext] || "application/octet-stream";
+    res.writeHead(200, {
+      "Content-Type": mime,
+      "Content-Length": data.length,
+      "Cache-Control": "no-cache",
+      "Access-Control-Allow-Origin": "*",
+    });
+    res.end(data);
+  });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1:" + BRIDGE_PORT);
   const route = url.pathname;
@@ -244,6 +271,9 @@ const server = http.createServer((req, res) => {
       if (req.method === "GET" && route === "/health") return json(res, 200, { ok: true });
       if (req.method === "GET" && route === "/status") return json(res, 200, await getStatus());
       if (req.method === "GET" && route === "/nodes") return json(res, 200, { nodes: await listNodes() });
+      if (req.method === "GET" && route.startsWith("/media/")) {
+        return serveMedia(res, decodeURIComponent(route.slice("/media/".length)));
+      }
       if (req.method === "POST" && route === "/start") {
         log("start requested");
         return json(res, 200, await startProxy());

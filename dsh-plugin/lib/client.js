@@ -330,6 +330,64 @@ window.__ModuleLoader__.load({
       sel.addEventListener("change", onNodeChange);
       document.addEventListener("click", onClickOutside);
 
+      // ---------- 对话区音视频内嵌 ----------
+      var VIDEO_EXTS = [".mp4", ".webm", ".mov", ".m4v", ".ogv"];
+      var AUDIO_EXTS = [".mp3", ".wav", ".ogg", ".oga", ".m4a", ".aac", ".flac", ".opus"];
+      function isMediaUrl(u, exts) {
+        try {
+          var p = new URL(u).pathname.toLowerCase();
+          return exts.some(function (e) { return p.endsWith(e); });
+        } catch { return false; }
+      }
+      function inConversation(el) {
+        return !!(el.closest('[data-pane="conversation"]') || el.closest("[data-chat-flow-kind]"));
+      }
+      function makePlayer(src, kind) {
+        var el = document.createElement(kind);
+        el.src = src;
+        el.controls = true;
+        el.preload = "metadata";
+        if (kind === "video") {
+          el.style.cssText = "max-width:100%;max-height:420px;border-radius:10px;background:#000;display:block;box-shadow:0 4px 14px rgba(0,0,0,.18);";
+        } else {
+          el.style.cssText = "max-width:100%;display:block;margin:6px 0;";
+        }
+        return el;
+      }
+      function upgradeMedia() {
+        // 消息里的媒体链接 [文字](xxx.mp4/mp3) → 内嵌播放器
+        document.querySelectorAll("a[href]").forEach(function (a) {
+          if (a.dataset.dshMediaDone || !inConversation(a)) return;
+          var kind = isMediaUrl(a.href, VIDEO_EXTS) ? "video" : (isMediaUrl(a.href, AUDIO_EXTS) ? "audio" : null);
+          if (!kind) return;
+          a.dataset.dshMediaDone = "1";
+          var wrap = document.createElement("div");
+          wrap.style.cssText = "margin:6px 0;";
+          var player = makePlayer(a.href, kind);
+          wrap.appendChild(player);
+          var link = a.cloneNode(false);   // 保留原链接（小字）
+          link.textContent = kind === "video" ? "打开原视频 ↗" : "下载原音频 ↘";
+          link.style.cssText = "font-size:12px;color:var(--dsw-alias-label-tertiary,#77839c);display:inline-block;margin-top:4px;";
+          wrap.appendChild(link);
+          a.replaceWith(wrap);
+        });
+        // markdown 图片语法指向媒体（![](xxx.mp4)）→ 也升级
+        document.querySelectorAll("img[src]").forEach(function (img) {
+          if (img.dataset.dshMediaDone || !inConversation(img)) return;
+          var kind = isMediaUrl(img.src, VIDEO_EXTS) ? "video" : (isMediaUrl(img.src, AUDIO_EXTS) ? "audio" : null);
+          if (!kind) return;
+          img.dataset.dshMediaDone = "1";
+          var player = makePlayer(img.src, kind);
+          img.replaceWith(player);
+        });
+      }
+      function startMediaObserver() {
+        upgradeMedia();
+        var obs = new MutationObserver(function () { upgradeMedia(); });
+        obs.observe(document.body, { childList: true, subtree: true });
+        return obs;
+      }
+
       // ---------- 挂载 ----------
       function mount() {
         if (!document.body) {
@@ -358,10 +416,12 @@ window.__ModuleLoader__.load({
         render();
         refresh();
         var timer = setInterval(refresh, POLL_MS);
+        var videoObs = startMediaObserver();
         ctx.effect(function () {
           return function () {
             clearInterval(timer);
             if (hideTimer) clearTimeout(hideTimer);
+            if (videoObs) videoObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (style.parentNode) style.parentNode.removeChild(style);
