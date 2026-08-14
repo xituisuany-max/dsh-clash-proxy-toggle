@@ -125,30 +125,68 @@ window.__ModuleLoader__.load({
       function diag(msg) {
         try { fetch(BRIDGE + "/debug", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: msg }), cache: "no-store" }).catch(function () {}); } catch (e) {}
       }
+      // 复制源按钮的样式（圆形/白底/金边随主题自动统一）
+      function copyButtonStyle(srcBtn, dstBtn) {
+        try {
+          var cs = window.getComputedStyle(srcBtn);
+          dstBtn.style.width = cs.width;
+          dstBtn.style.height = cs.height;
+          dstBtn.style.borderRadius = cs.borderRadius;
+          dstBtn.style.background = cs.backgroundColor;
+          dstBtn.style.border = cs.border;
+          dstBtn.style.color = cs.color;
+          dstBtn.style.padding = cs.padding;
+          dstBtn.style.margin = cs.margin;
+          dstBtn.style.display = "inline-flex";
+          dstBtn.style.alignItems = "center";
+          dstBtn.style.justifyContent = "center";
+          dstBtn.style.flex = "none";
+        } catch (e) {}
+      }
+      // 识别"+"附件按钮（文字为 + 或含加号 SVG）
+      function isPlusBtn(b) {
+        var t = (b.textContent || "").replace(/\s/g, "");
+        if (t === "+") return true;
+        var d = (b.innerHTML || "");
+        return /M12 5v14|M5 12h14/.test(d);
+      }
       function mountComposerShotButton() {
         if (composerShotMounted) return;
         var C = findComposer();
         diag("mount attempt: composer=" + !!C);
         if (!C) return;
-        // 若在兜底位置，先移出并恢复行内样式
+        // 若在兜底位置，先移出
         if (fallbackMounted && shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
         fallbackMounted = false;
-        shotBtn.style.cssText = SHOTBTN_INLINE;
-        refBtn.style.cssText = SHOTBTN_INLINE;
-        var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i], [aria-label*='upload' i], [class*='upload' i]");
-        diag("attach found=" + !!attach + " parent=" + (attach && attach.parentNode ? (attach.parentNode.className || attach.parentNode.tagName) : "-"));
-        if (attach && attach.parentNode) {
-          // 紧跟附件按钮之后插入（红圈位置，保证可见）——只放截图按钮，强刷按钮在顶栏
-          attach.insertAdjacentElement("afterend", shotBtn);
-        } else {
-          var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
-          if (send && send.parentNode) {
-            send.parentNode.insertBefore(shotBtn, send);
+        // 找"+"按钮
+        var allBtns = C.querySelectorAll("button");
+        var plusBtn = null;
+        for (var bi = 0; bi < allBtns.length; bi++) { if (isPlusBtn(allBtns[bi])) { plusBtn = allBtns[bi]; break; } }
+        diag("plus found=" + !!plusBtn + " totalBtns=" + allBtns.length);
+        if (plusBtn && plusBtn.parentNode) {
+          var row = plusBtn.parentNode;
+          var rowBtns = row.querySelectorAll("button");
+          var idx = -1;
+          for (var r = 0; r < rowBtns.length; r++) { if (rowBtns[r] === plusBtn) { idx = r; break; } }
+          // 插到"+"之后的下一个按钮（盾牌）旁边
+          var styleSrc = plusBtn;
+          if (idx >= 0 && rowBtns[idx + 1]) {
+            rowBtns[idx + 1].insertAdjacentElement("afterend", shotBtn);
+            styleSrc = rowBtns[idx + 1];
           } else {
-            var btns = C.querySelectorAll("button");
-            if (btns.length > 0) btns[0].parentNode.insertBefore(shotBtn, btns[0]);
-            else C.insertBefore(shotBtn, C.firstChild);
+            plusBtn.insertAdjacentElement("afterend", shotBtn);
           }
+          copyButtonStyle(styleSrc, shotBtn);
+        } else {
+          // 没有"+"：插到第一个圆形小按钮后面并复制其样式
+          var anchor = null;
+          for (var a = 0; a < allBtns.length; a++) {
+            var btn = allBtns[a];
+            var bs = btn.getBoundingClientRect();
+            if (bs.width > 18 && bs.width < 46 && Math.abs(bs.width - bs.height) < 6) { anchor = btn; break; }
+          }
+          if (anchor) { anchor.insertAdjacentElement("afterend", shotBtn); copyButtonStyle(anchor, shotBtn); }
+          else C.insertBefore(shotBtn, C.firstChild);
         }
         composerShotMounted = true;
         diag("mounted in composer, connected=" + shotBtn.isConnected);
