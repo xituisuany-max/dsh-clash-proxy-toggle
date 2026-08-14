@@ -1,8 +1,7 @@
 /* dsh-client-ui-pet — 鲸鱼娘桌宠
  * 一只住在 DSH Web GUI 角落的 Q 版女仆鲸鱼娘：
  *  - 可拖动（松手自动吸附最近的屏幕角）
- *  - 浮动 + 呼吸动画
- *  - 点击：蹦跳 + 随机台词气泡
+ *  - 单击：蹦跳 + 随机台词气泡；双击：切换动作
  * 素材经桥接 /media 通道提供（127.0.0.1:54123），明暗主题自适应。 */
 window.__ModuleLoader__.load({
   id: "@dsh-external/dsh-client-ui-pet",
@@ -45,7 +44,6 @@ window.__ModuleLoader__.load({
       pet.style.cssText = [
         "position:fixed", "right:24px", "bottom:20px", "z-index:99999",
         "width:130px", "cursor:grab", "user-select:none",
-        "animation:dshPetFloat 3s ease-in-out infinite",
       ].join(";");
 
       var bubble = document.createElement("div");
@@ -75,7 +73,6 @@ window.__ModuleLoader__.load({
       img.draggable = false;
       img.style.cssText = [
         "width:100%", "display:block", "pointer-events:none",
-        "animation:dshPetBreathe 4s ease-in-out infinite",
         "filter:drop-shadow(0 6px 12px rgba(0,0,0,.18))",
       ].join(";");
 
@@ -86,10 +83,7 @@ window.__ModuleLoader__.load({
       // ---------- 样式 ----------
       var style = document.createElement("style");
       style.textContent = [
-        "@keyframes dshPetFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}",
-        "@keyframes dshPetBreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}",
         "@keyframes dshPetBounce{0%{transform:scale(1)}30%{transform:scale(1.18) rotate(-4deg)}60%{transform:scale(.92) rotate(3deg)}100%{transform:scale(1)}}",
-        "@keyframes dshPetBubbleIn{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}",
         "[data-dsh-pet='root']:active{cursor:grabbing}",
         "[data-dsh-pet='root'].bounce [data-dsh-pet='img']{animation:dshPetBounce .6s ease}",
 
@@ -121,7 +115,6 @@ window.__ModuleLoader__.load({
       window.addEventListener("mouseup", function () {
         if (!dragging) return;
         dragging = false;
-        pet.style.animation = "dshPetFloat 3s ease-in-out infinite";
         if (!moved) { onPetClick(); return; }
         var r = pet.getBoundingClientRect();
         var ww = window.innerWidth, wh = window.innerHeight;
