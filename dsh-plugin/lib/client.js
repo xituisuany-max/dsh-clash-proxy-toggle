@@ -57,9 +57,7 @@ window.__ModuleLoader__.load({
         "transition:background .15s,border-color .15s",
       ].join(";");
 
-      var composerShotMounted = false;
-      function mountComposerShotButton() {
-        if (composerShotMounted) return;
+      function findComposer() {
         var C = document.querySelector("[data-composer-card]");
         if (!C) {
           var all = document.querySelectorAll("[class*='composer' i]");
@@ -68,6 +66,12 @@ window.__ModuleLoader__.load({
             if (el.offsetParent !== null && el.querySelector("textarea")) { C = el; break; }
           }
         }
+        return C;
+      }
+      var composerShotMounted = false;
+      function mountComposerShotButton() {
+        if (composerShotMounted) return;
+        var C = findComposer();
         if (!C) return;
         // 插到附件/发送按钮旁边（同一工具行，QQ 风格在左侧）
         var target = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]") ||
@@ -82,6 +86,30 @@ window.__ModuleLoader__.load({
       function ensureComposerShotButton() {
         if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
         mountComposerShotButton();
+      }
+      // 截图自动进入输入框（QQ 风格）：写入剪贴板 + 模拟粘贴到输入框
+      function attachShotToComposer(url) {
+        fetch(url, { cache: "no-store" })
+          .then(function (r) { return r.blob(); })
+          .then(function (blob) {
+            var file = new File([blob], "screenshot.png", { type: "image/png" });
+            // 1) 写剪贴板（随时可 Ctrl+V）
+            try {
+              navigator.clipboard.write([new ClipboardItem({ "image/png": file })]).catch(function () {});
+            } catch (e) {}
+            // 2) 模拟粘贴到输入框（触发组件的 onPaste 附件处理）
+            var C = findComposer();
+            var input = C ? (C.querySelector("textarea") || C.querySelector("[contenteditable='true']") || C.querySelector("input[type='text']")) : null;
+            if (input) {
+              try {
+                var dt = new DataTransfer();
+                dt.items.add(file);
+                var ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+                input.dispatchEvent(ev);
+              } catch (e) {}
+            }
+          })
+          .catch(function () {});
       }
 
       function buildWhale(size) {
@@ -252,9 +280,10 @@ window.__ModuleLoader__.load({
             if (d.ok) {
               state.lastShot = d;
               shotImg.src = d.url + "?t=" + Date.now();
-              shotHint.textContent = "已保存: " + d.file + " —— 直接告诉我「看截图」即可";
+              shotHint.textContent = "已保存: " + d.file;
               shotBox.style.display = "block";
-              showShotFloat(d.file, d.url);
+              showShotFloat("✅ 截图已放入输入框，回车即可发送（也可 Ctrl+V 粘贴）", d.url);
+              attachShotToComposer(d.url);
             } else if (d.cancelled) {
               showShotFloat("已取消截图", null);
             } else {
