@@ -133,8 +133,13 @@ window.__ModuleLoader__.load({
           attach.insertAdjacentElement("afterend", shotBtn);
         } else {
           var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
-          if (send && send.parentNode) send.parentNode.insertBefore(shotBtn, send);
-          else C.insertBefore(shotBtn, C.firstChild);
+          if (send && send.parentNode) {
+            send.parentNode.insertBefore(shotBtn, send);
+          } else {
+            var btns = C.querySelectorAll("button");
+            if (btns.length > 0) btns[0].parentNode.insertBefore(shotBtn, btns[0]);
+            else C.insertBefore(shotBtn, C.firstChild);
+          }
         }
         composerShotMounted = true;
         diag("mounted in composer, connected=" + shotBtn.isConnected);
@@ -165,38 +170,50 @@ window.__ModuleLoader__.load({
       }, 1000);
       var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 25000);
 
-      // 强刷按钮挂到顶栏"标准模式"旁边
+      // 强刷按钮挂到顶栏"标准模式"旁边（选最内层元素，重渲染后自动重挂）
       var refMountedTop = false;
       function mountRefButtonTop() {
-        if (refMountedTop) return;
-        var candidates = document.querySelectorAll("button, [role='tab'], [class*='mode' i], [class*='header' i] span, [class*='header' i] div, [class*='header' i] button");
+        if (refMountedTop && refBtn.isConnected) return;
+        if (refMountedTop && !refBtn.isConnected) refMountedTop = false;
+        var all = document.querySelectorAll("body *");
         var target = null;
-        for (var i = 0; i < candidates.length; i++) {
-          var el = candidates[i];
-          if (el.offsetParent !== null && el.textContent && el.textContent.replace(/\s/g, "").indexOf("标准模式") >= 0) {
-            target = el;
-            break;
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          if (el.offsetParent === null) continue;
+          var txt = (el.textContent || "").replace(/\s/g, "");
+          if (txt.indexOf("标准模式") < 0) continue;
+          var hasInner = false;
+          for (var c = 0; c < el.children.length; c++) {
+            if (((el.children[c].textContent || "").replace(/\s/g, "")).indexOf("标准模式") >= 0) { hasInner = true; break; }
           }
+          if (!hasInner) { target = el; break; }  // 最内层
         }
         if (!target) {
-          // 备选：顶栏里含"DeepSeek"或模型名的按钮/标签
-          for (var j = 0; j < candidates.length; j++) {
-            var e2 = candidates[j];
-            if (e2.offsetParent !== null && e2.textContent && /DeepSeek|V4|High|模型/.test(e2.textContent) && e2.children.length <= 2) {
-              target = e2;
-              break;
+          // 备选：顶栏里含"DeepSeek"/模型名的最内层元素
+          for (var j = 0; j < all.length; j++) {
+            var e2 = all[j];
+            if (e2.offsetParent === null) continue;
+            var t2 = (e2.textContent || "").replace(/\s/g, "");
+            if (!/DeepSeek|V4|High|模型/.test(t2)) continue;
+            var hasInner2 = false;
+            for (var c2 = 0; c2 < e2.children.length; c2++) {
+              if (/DeepSeek|V4|High|模型/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
             }
+            if (!hasInner2 && e2.children.length <= 2) { target = e2; break; }
           }
         }
         if (target) {
           refBtn.style.cssText = SHOTBTN_INLINE;
           target.insertAdjacentElement("afterend", refBtn);
           refMountedTop = true;
-          diag("ref button mounted next to: " + (target.textContent || "").trim().slice(0, 20));
+          diag("ref mounted next to innermost: " + (target.textContent || "").trim().slice(0, 12) + " tag=" + target.tagName);
         }
       }
-      var refTimer = setInterval(function () { mountRefButtonTop(); if (refMountedTop) clearInterval(refTimer); }, 1000);
-      var refGuard = setInterval(function () { if (refMountedTop) clearInterval(refTimer); }, 30000);
+      var refTimer = setInterval(function () {
+        if (refMountedTop && refBtn.isConnected) { clearInterval(refTimer); return; }
+        mountRefButtonTop();
+      }, 1000);
+      var refGuard = setInterval(function () { if (refMountedTop && refBtn.isConnected) clearInterval(refTimer); }, 30000);
 
       function ensureComposerShotButton() {
         if (composerShotMounted && !shotBtn.isConnected) composerShotMounted = false;
