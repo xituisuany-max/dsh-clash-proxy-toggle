@@ -83,10 +83,7 @@ window.__ModuleLoader__.load({
       // ---------- 样式 ----------
       var style = document.createElement("style");
       style.textContent = [
-        "@keyframes dshPetBounce{0%{transform:scale(1)}30%{transform:scale(1.18) rotate(-4deg)}60%{transform:scale(.92) rotate(3deg)}100%{transform:scale(1)}}",
         "[data-dsh-pet='root']:active{cursor:grabbing}",
-        "[data-dsh-pet='root'].bounce [data-dsh-pet='img']{animation:dshPetBounce .6s ease}",
-
       ].join("");
       document.head.appendChild(style);
 
@@ -101,7 +98,6 @@ window.__ModuleLoader__.load({
         origX = r.left; origY = r.top;
         pet.style.right = "auto"; pet.style.bottom = "auto";
         pet.style.left = origX + "px"; pet.style.top = origY + "px";
-        pet.style.animation = "none";
         // 不 preventDefault，保证 click 事件能触发
       });
       window.addEventListener("mousemove", function (e) {
@@ -195,13 +191,6 @@ window.__ModuleLoader__.load({
 
       function onPetClick() {
         playHappy();
-        // 蹦跳：直接操作 img transform（可靠，不受 CSS 动画覆盖影响）
-        img.style.animation = "none";
-        img.style.transition = "none";
-        img.style.transform = "scale(1.18) rotate(-4deg)";
-        setTimeout(function () { img.style.transform = "scale(.92) rotate(3deg)"; }, 120);
-        setTimeout(function () { img.style.transform = "scale(1)"; }, 240);
-        setTimeout(function () { img.style.animation = ""; }, 400);
         // 气泡
         bubble.textContent = LINES[Math.floor(Math.random() * LINES.length)];
         if (!bubble.parentNode) document.body.appendChild(bubble);
