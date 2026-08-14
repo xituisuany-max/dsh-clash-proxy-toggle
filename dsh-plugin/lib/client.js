@@ -177,13 +177,19 @@ window.__ModuleLoader__.load({
           for (var p = 0; p < clickables.length; p++) { if (isPlusBtn(clickables[p])) { plus = clickables[p]; break; } }
           diag("shield found=" + !!shield + " plus found=" + !!plus + " totalBtns=" + clickables.length);
           if (plus) {
-            var target = plus, seen = false;
-            for (var q = 0; q < clickables.length; q++) {
-              if (seen) { target = clickables[q]; break; }
-              if (clickables[q] === plus) seen = true;
+            // 盾牌可能不是 <button>：直接用 "+" 的 nextElementSibling（视觉上盾牌紧跟其后）
+            var target = plus.nextElementSibling;
+            // 防止误跟到"发送"：若目标像发送按钮，继续往右找盾牌
+            if (target) {
+              var tH = (target.innerHTML || "");
+              var tT = (target.textContent || "").replace(/\s/g, "");
+              var isSend = /M22 2L11 13|M22 2l-7 20-4-9-9-4z|lucide-send/i.test(tH) || /发送|send/i.test(tT) || /send/i.test(target.className || "");
+              if (isSend && target.nextElementSibling) target = target.nextElementSibling;
             }
+            if (!target) target = plus;
             target.insertAdjacentElement("afterend", shotBtn);
             copyButtonStyle(target, shotBtn);
+            diag("shot after tag=" + target.tagName + " cls=" + String(target.className || "").slice(0, 30));
           } else {
             // 3) 兜底：第一个方形小按钮之后
             var anchor = null;
