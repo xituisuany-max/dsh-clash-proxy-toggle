@@ -42,15 +42,16 @@ window.__ModuleLoader__.load({
         "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
       ].join(";");
 
-      // ---------- 截图按钮（QQ 风格：放在聊天输入框里） ----------
+      // ---------- 截图按钮（QQ 风格：放在聊天输入框左按钮行） ----------
       var shotBtn = document.createElement("button");
       shotBtn.type = "button";
       shotBtn.setAttribute("data-proxy-toggle", "shotbtn");
-      shotBtn.title = "截屏：一键截取当前屏幕，方便发给 AI 查看";
+      shotBtn.title = "截屏：一键截取屏幕区域，自动放入输入框";
       shotBtn.setAttribute("aria-label", "截屏");
-      shotBtn.textContent = "📷";
+      // 矢量相机图标（保证任何系统都正常显示，不依赖 emoji 字体）
+      shotBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>';
       shotBtn.style.cssText = [
-        "width:26px", "height:26px", "padding:0", "font-size:14px", "flex:none",
+        "width:26px", "height:26px", "padding:0", "flex:none",
         "display:inline-flex", "align-items:center", "justify-content:center",
         "border-radius:7px", "border:1px solid transparent", "cursor:pointer",
         "background:transparent", "color:var(--dsw-alias-label-secondary,#4a5670)",
@@ -73,13 +74,14 @@ window.__ModuleLoader__.load({
         if (composerShotMounted) return;
         var C = findComposer();
         if (!C) return;
-        // 插到附件/发送按钮旁边（同一工具行，QQ 风格在左侧）
-        var target = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]") ||
-                     C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
-        if (target && target.parentNode) {
-          target.parentNode.insertBefore(shotBtn, target);
+        // 放进附件按钮所在的左按钮行（红圈位置：输入框左下角按钮区）
+        var attach = C.querySelector("[class*='attach' i], [aria-label*='attach' i], [title*='附件'], [title*='attach' i]");
+        if (attach && attach.parentNode) {
+          attach.parentNode.appendChild(shotBtn);
         } else {
-          C.insertBefore(shotBtn, C.firstChild);
+          var send = C.querySelector("[class*='send' i], [aria-label*='send' i], [title*='发送'], [title*='send' i]");
+          if (send && send.parentNode) send.parentNode.insertBefore(shotBtn, send);
+          else C.insertBefore(shotBtn, C.firstChild);
         }
         composerShotMounted = true;
       }
@@ -273,61 +275,25 @@ window.__ModuleLoader__.load({
       function takeScreenshot() {
         if (state.shotBusy) return;
         state.shotBusy = true;
-        showShotFloat("📷 请在屏幕上**拖动框选**截图区域（Esc 取消）…", null);
+        shotHint.textContent = "请在屏幕上拖动框选截图区域（Esc 取消）…";
+        shotBox.style.display = "block";
         fetch(BRIDGE + "/screenshot", { method: "POST", cache: "no-store" })
           .then(function (r) { return r.json(); })
           .then(function (d) {
             if (d.ok) {
               state.lastShot = d;
               shotImg.src = d.url + "?t=" + Date.now();
-              shotHint.textContent = "已保存: " + d.file;
+              shotHint.textContent = "已放入输入框，回车发送（或 Ctrl+V 粘贴）: " + d.file;
               shotBox.style.display = "block";
-              showShotFloat("✅ 截图已放入输入框，回车即可发送（也可 Ctrl+V 粘贴）", d.url);
               attachShotToComposer(d.url);
             } else if (d.cancelled) {
-              showShotFloat("已取消截图", null);
+              shotHint.textContent = "已取消截图";
             } else {
-              showShotFloat("截屏失败: " + (d.error || "未知错误"), null);
+              shotHint.textContent = "截屏失败: " + (d.error || "未知错误");
             }
           })
-          .catch(function () { showShotFloat("截屏失败：桥接不可用", null); })
+          .catch(function () { shotHint.textContent = "截屏失败：桥接不可用"; })
           .then(function () { state.shotBusy = false; });
-      }
-
-      // 独立的浮动截图反馈（不依赖悬停面板，点 📷 后立刻可见）
-      var shotFloat = document.createElement("div");
-      shotFloat.setAttribute("data-proxy-toggle", "shot");
-      shotFloat.style.cssText = [
-        "position:fixed", "bottom:150px", "right:18px", "z-index:9999", "display:none",
-        "width:230px", "padding:10px", "border-radius:12px",
-        "background:var(--dsw-alias-bg-module-platform,#ffffff)",
-        "border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35))",
-        "box-shadow:0 12px 32px rgba(0,0,0,.22)",
-        "font:12px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif",
-        "color:var(--dsw-alias-label-primary,#1c2333)",
-      ].join(";");
-      var shotFloatImg = document.createElement("img");
-      shotFloatImg.style.cssText = "max-width:100%;border-radius:8px;display:block;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.3));";
-      shotFloatImg.title = "点击查看大图";
-      shotFloatImg.addEventListener("click", function () { if (shotFloatImg.src) window.open(shotFloatImg.src.split("?")[0], "_blank"); });
-      var shotFloatText = document.createElement("div");
-      shotFloatText.style.cssText = "margin-top:6px;word-break:break-all;";
-      var shotFloatClose = document.createElement("button");
-      shotFloatClose.type = "button";
-      shotFloatClose.textContent = "✕ 关闭";
-      shotFloatClose.style.cssText = "margin-top:8px;padding:4px 10px;border-radius:7px;border:1px solid var(--dsw-alias-border-l2,rgba(120,130,150,.35));background:transparent;color:var(--dsw-alias-label-secondary,#4a5670);cursor:pointer;font-size:11px;";
-      shotFloatClose.addEventListener("click", function () { shotFloat.style.display = "none"; });
-      shotFloat.append(shotFloatImg, shotFloatText, shotFloatClose);
-
-      function showShotFloat(text, imgUrl) {
-        if (imgUrl) {
-          shotFloatImg.src = imgUrl + "?t=" + Date.now();
-          shotFloatImg.style.display = "block";
-        } else {
-          shotFloatImg.style.display = "none";
-        }
-        shotFloatText.textContent = text;
-        shotFloat.style.display = "block";
       }
 
       // ---------- 渲染 ----------
@@ -558,7 +524,6 @@ window.__ModuleLoader__.load({
         document.head.appendChild(style);
         document.body.appendChild(btn);
         document.body.appendChild(panel);
-        document.body.appendChild(shotFloat);
         document.body.dataset[MARKER] = "1";
         render();
         refresh();
@@ -579,7 +544,6 @@ window.__ModuleLoader__.load({
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
-            if (shotFloat.parentNode) shotFloat.parentNode.removeChild(shotFloat);
             if (style.parentNode) style.parentNode.removeChild(style);
             delete document.body.dataset[MARKER];
           };
