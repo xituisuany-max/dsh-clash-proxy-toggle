@@ -42,36 +42,7 @@ window.__ModuleLoader__.load({
         "background:transparent", "transition:background .15s,border-color .15s,transform .12s",
       ].join(";");
 
-      // ---------- 上传文件按钮（📎：任意格式文件 → 输入框附件） ----------
-      var fileBtn = document.createElement("button");
-      fileBtn.type = "button";
-      fileBtn.setAttribute("data-proxy-toggle", "filebtn");
-      fileBtn.title = "上传文件：选择任意格式文件（视频/音频/文档/压缩包），自动放入输入框";
-      fileBtn.setAttribute("aria-label", "上传文件");
-      fileBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
-      var FILEBTN_INLINE = [
-        "width:26px", "height:26px", "padding:0", "flex:none",
-        "display:inline-flex", "align-items:center", "justify-content:center",
-        "border-radius:50%", "cursor:pointer",
-        "background:var(--dsw-alias-bg-module-platform,#ffffff)",
-        "border:1px solid var(--dsw-alias-border-l2,rgba(176,141,79,.6))",
-        "color:var(--dsw-alias-label-secondary,#4a5670)",
-        "transition:background .15s,border-color .15s",
-      ].join(";");
-      fileBtn.style.cssText = FILEBTN_INLINE;
-      // 隐藏的 file input（支持任意格式、多选）
-      var fileInput = document.createElement("input");
-      fileInput.type = "file";
-      fileInput.multiple = true;
-      fileInput.style.display = "none";
-      fileInput.setAttribute("data-proxy-toggle", "fileinput");
-      fileInput.addEventListener("change", function () {
-        var files = fileInput.files ? Array.prototype.slice.call(fileInput.files) : [];
-        if (files.length) attachFilesToComposer(files);
-        fileInput.value = "";
-      });
-      document.addEventListener("DOMContentLoaded", function () { if (!fileInput.parentNode) document.body.appendChild(fileInput); });
-
+      // ---------- 拖拽上传任意文件（视频/音频/文档/压缩包 → 输入框附件） ----------
       // 通用附件注入：任意格式文件 → 模拟粘贴进输入框（与截图同一机制，支持多文件）
       function attachFilesToComposer(files) {
         var C = findComposer();
@@ -95,6 +66,8 @@ window.__ModuleLoader__.load({
           var ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
           input.dispatchEvent(ev);
           diag("files attached: " + files.map(function (f) { return f.name + "(" + f.size + ")"; }).join(" | "));
+
+
         } catch (e) {
           diag("file attach error: " + e.message);
         }
@@ -154,17 +127,6 @@ window.__ModuleLoader__.load({
           }
         }, true);
         diag("composer drop hooked");
-      }
-
-      function ensureComposerFileButton() {
-        if (!fileBtn.isConnected && composerShotMounted) {
-          // 截图按钮挂载后，把文件按钮插到它旁边
-          if (shotBtn.parentNode) {
-            shotBtn.insertAdjacentElement("afterend", fileBtn);
-            copyButtonStyle(shotBtn, fileBtn);
-          }
-        }
-        hookComposerDrop();
       }
 
       // ---------- 截图按钮（QQ 风格：放在聊天输入框左按钮行） ----------
@@ -390,8 +352,6 @@ window.__ModuleLoader__.load({
           document.body.appendChild(shotBtn);
           refBtn.style.cssText = FLOAT_STYLE;
           shotBtn.insertAdjacentElement("afterend", refBtn);
-          fileBtn.style.cssText = FLOAT_STYLE;
-          shotBtn.insertAdjacentElement("beforebegin", fileBtn);
           fallbackMounted = true;
         }
       }, 1000);
@@ -794,10 +754,6 @@ window.__ModuleLoader__.load({
       btn.addEventListener("click", toggle);
       pBtn.addEventListener("click", toggle);
       shotBtn.addEventListener("click", takeScreenshot);
-      fileBtn.addEventListener("click", function () {
-        if (!fileInput.parentNode) document.body.appendChild(fileInput);
-        fileInput.click();
-      });
       sel.addEventListener("change", onNodeChange);
       document.addEventListener("click", onClickOutside);
 
@@ -826,8 +782,8 @@ window.__ModuleLoader__.load({
         return el;
       }
       function upgradeMedia() {
-        ensureComposerShotButton();  // 输入框重渲染后恢复截图按钮
-        ensureComposerFileButton();  // 恢复文件上传按钮
+        ensureComposerShotButton();
+        decorateAttachmentIcons();  // 输入框重渲染后恢复截图按钮
 
         // 消息里的媒体链接 [文字](xxx.mp4/mp3) → 内嵌播放器
         document.querySelectorAll("a[href]").forEach(function (a) {
@@ -854,6 +810,146 @@ window.__ModuleLoader__.load({
           var player = makePlayer(img.src, kind);
           img.replaceWith(player);
         });
+      }
+      // ---------- 附件图标装饰：未知格式文件 → 对应格式图标 ----------
+      // 文件扩展名 → 图标类型映射
+      var FILE_ICON_MAP = [
+        { re: /\.(png|jpe?g|gif|webp|bmp|svg|ico|avif)$/i, type: "image" },
+        { re: /\.(mp4|webm|mov|m4v|avi|mkv|ogv|flv|wmv)$/i, type: "video" },
+        { re: /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|wma|midi?)$/i, type: "audio" },
+        { re: /\.(zip|rar|7z|tar|gz|bz2|xz|iso)$/i, type: "archive" },
+        { re: /\.(pdf)$/i, type: "pdf" },
+        { re: /\.(docx?|doc|rtf|odt|pages)$/i, type: "doc" },
+        { re: /\.(xlsx?|xls|csv|ods|numbers)$/i, type: "sheet" },
+        { re: /\.(pptx?|ppt|odp|key)$/i, type: "slides" },
+        { re: /\.(txt|md|markdown|log)$/i, type: "text" },
+        { re: /\.(js|ts|jsx|tsx|py|java|c|cpp|h|go|rs|rb|php|html|css|json|xml|yaml|yml|sh|bat|ps1|sql)$/i, type: "code" },
+      ];
+      function fileIconType(name) {
+        if (!name) return "file";
+        for (var i = 0; i < FILE_ICON_MAP.length; i++) {
+          if (FILE_ICON_MAP[i].re.test(name)) return FILE_ICON_MAP[i].type;
+        }
+        return "file";
+      }
+      // 各类型 SVG 图标（线性风格，与 DSH 图标一致）
+      function fileIconSVG(type, size) {
+        var s = size || 20;
+        var paths = {
+          image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+          video: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/>',
+          audio: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+          archive: '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>',
+          pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 11h2"/>',
+          doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>',
+          sheet: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2v2H8zM12 13h2v2h-2zM16 13h2v2h-2zM8 17h2v2H8zM12 17h2v2h-2z"/>',
+          slides: '<path d="M2 3h20v11H2z"/><path d="M7 21h10M12 18v3"/>',
+          text: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+          code: '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>',
+          file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+        };
+        var d = paths[type] || paths.file;
+        return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+      }
+      // 扫描输入框附件条，替换未知格式图标的缩略图
+      // 美化版格式图标（浅蓝灰圆角底 + 深灰蓝线条，与 DSH UI 一致）
+var FICON_DATA = {"video":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2220%22%20height%3D%2216%22%20rx%3D%223%22%2F%3E%3Cpath%20d%3D%22M10%209l5%203-5%203z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","audio":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M9%2018V5l12-2v13%22%2F%3E%3Ccircle%20cx%3D%226%22%20cy%3D%2218%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2216%22%20r%3D%223%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","archive":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M21%208v13H3V8%22%2F%3E%3Cpath%20d%3D%22M1%203h22v5H1z%22%2F%3E%3Cpath%20d%3D%22M10%2012h4%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","pdf":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6%22%2F%3E%3Cpath%20d%3D%22M9%2015h6M9%2011h2%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","doc":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6%22%2F%3E%3Cpath%20d%3D%22M8%2013h8M8%2017h5%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","sheet":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6%22%2F%3E%3Cpath%20d%3D%22M8%2013h2v2H8zM12%2013h2v2h-2zM16%2013h2v2h-2zM8%2017h2v2H8zM12%2017h2v2h-2z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","slides":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M2%203h20v11H2z%22%2F%3E%3Cpath%20d%3D%22M7%2021h10M12%2018v3%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","text":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M4%206h16M4%2012h16M4%2018h10%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","code":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M16%2018l6-6-6-6M8%206l-6%206%206%206%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","image":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Crect%20x%3D%223%22%20y%3D%223%22%20width%3D%2218%22%20height%3D%2218%22%20rx%3D%222%22%2F%3E%3Ccircle%20cx%3D%228.5%22%20cy%3D%228.5%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M21%2015l-5-5L5%2021%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E","file":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Crect%20x%3D%224%22%20y%3D%224%22%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2210%22%20fill%3D%22%23e8edf5%22%2F%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%233d4a63%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20transform%3D%22translate(12%2012)%20scale(1)%22%3E%3Cpath%20d%3D%22M14%202H6a2%202%200%200%200-2%202v16a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8z%22%2F%3E%3Cpath%20d%3D%22M14%202v6h6%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"};
+      // 按文件名判断类型（与 FILE_ICON_MAP 一致，返回 FICON_DATA 键）
+      function ficonType(name) {
+        if (!name) return "file";
+        var map = [
+          [/\.(png|jpe?g|gif|webp|bmp|svg|ico|avif)$/i, "image"],
+          [/\.(mp4|webm|mov|m4v|avi|mkv|ogv|flv|wmv)$/i, "video"],
+          [/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|wma|midi?)$/i, "audio"],
+          [/\.(zip|rar|7z|tar|gz|bz2|xz|iso)$/i, "archive"],
+          [/\.pdf$/i, "pdf"],
+          [/\.(docx?|doc|rtf|odt|pages)$/i, "doc"],
+          [/\.(xlsx?|xls|csv|ods|numbers)$/i, "sheet"],
+          [/\.(pptx?|ppt|odp|key)$/i, "slides"],
+          [/\.(txt|md|markdown|log)$/i, "text"],
+          [/\.(js|ts|jsx|tsx|py|java|c|cpp|h|go|rs|rb|php|html|css|json|xml|yaml|yml|sh|bat|ps1|sql)$/i, "code"],
+        ];
+        for (var i = 0; i < map.length; i++) if (map[i][0].test(name)) return map[i][1];
+        return "file";
+      }
+      // 核心：附件栏 img 加载失败 → 替换为格式图标（DSH AttachmentRail 只渲染 img）
+      function fixAttachmentImg(img) {
+        if (img.dataset.dshFIcon) return;
+        var fname = img.alt || "";
+        if (!fname) {
+          var parent = img.closest("[class*='item' i], [class*='card' i], [class*='attach' i], [class*='thumb' i]");
+          if (parent) {
+            var m = (parent.textContent || "").match(/([\w\u4e00-\u9fa5][\w\u4e00-\u9fa5 ._-]*\.\w{2,5})/);
+            if (m) fname = m[1];
+          }
+        }
+        var type = ficonType(fname);
+        if (type === "image" && !/failed|error|broken/i.test(img.alt || "")) return;
+        img.dataset.dshFIcon = type;
+        img.src = FICON_DATA[type] || FICON_DATA.file;
+        // 美化：图标放大、卡片居中、圆角
+        img.style.width = "36px";
+        img.style.height = "36px";
+        img.style.objectFit = "contain";
+        img.style.margin = "6px auto 2px";
+        img.style.display = "block";
+        // 卡片改为纵向布局（图标在上、文件名在下）
+        var card = img.closest("button") || img.parentElement;
+        if (card) {
+          card.style.display = "flex";
+          card.style.flexDirection = "column";
+          card.style.alignItems = "center";
+          card.style.justifyContent = "center";
+          card.style.padding = "4px 6px";
+          card.style.background = "transparent";
+          card.style.border = "none";
+          // 注入文件名小字（若尚无）
+          if (!card.querySelector("[data-dsh-fname]")) {
+            var nameSpan = document.createElement("span");
+            nameSpan.setAttribute("data-dsh-fname", "1");
+            nameSpan.textContent = fname;
+            nameSpan.style.cssText = "font-size:10px;color:var(--dsw-alias-label-tertiary,#8a94a8);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2;padding:0 2px;";
+            card.appendChild(nameSpan);
+          }
+        }
+      }
+      function decorateAttachmentIcons() {
+        try {
+          var imgs = document.querySelectorAll("img");
+          for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            if (img.dataset.dshFIcon) continue;
+            // 只处理附件栏的 img（父链含 item/card/attach/rail）
+            var p = img.parentElement;
+            var isAttach = false;
+            for (var lv = 0; lv < 4 && p; lv++) {
+              if (/item|card|attach|rail|thumb|preview/i.test(String(p.className||""))) { isAttach = true; break; }
+              p = p.parentElement;
+            }
+            if (!isAttach) continue;
+            // 已加载成功（naturalWidth>0 且 src 非 data:）→ 保留
+            if (img.complete && img.naturalWidth > 0 && !/^data:/.test(img.src)) continue;
+            // 未加载/失败 → 监听 onerror 或直接尝试
+            img.addEventListener("error", function () { fixAttachmentImg(this); });
+            if (img.complete && img.naturalWidth === 0) fixAttachmentImg(img);
+            // 非 data: 的 src，延迟检查（等加载结果）
+            if (!/^data:/.test(img.src)) {
+              (function (im) {
+                setTimeout(function () { if (!im.dataset.dshFIcon && im.naturalWidth === 0) fixAttachmentImg(im); }, 1500);
+              })(img);
+            }
+          }
+        } catch (e) { diag("FICON-ERR: " + e.message); }
+      }
+      var ficonObs = null;
+      function startIconObserver() {
+        decorateAttachmentIcons();
+        var t = null;
+        ficonObs = new MutationObserver(function () {
+          if (t) clearTimeout(t);
+          t = setTimeout(decorateAttachmentIcons, 400);
+        });
+        ficonObs.observe(document.body, { childList: true, subtree: true });
       }
       function startMediaObserver() {
         upgradeMedia();
@@ -884,7 +980,6 @@ window.__ModuleLoader__.load({
           "[data-proxy-toggle='pbtn']:not(:disabled):active{transform:translateY(0);filter:brightness(.96)}",
           "[data-proxy-toggle='refbtn']:hover{background:rgba(255,255,255,.32);border-color:rgba(255,255,255,.55)}",
           "[data-proxy-toggle='shotbtn']:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.07));border-color:var(--dsw-alias-border-l2,rgba(120,130,150,.35))}",
-          "[data-proxy-toggle='filebtn']:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.07));border-color:var(--dsw-alias-border-l2,rgba(120,130,150,.35))}",
         ].join("");
         document.head.appendChild(style);
         document.body.appendChild(btn);
@@ -897,12 +992,11 @@ window.__ModuleLoader__.load({
         // 截图按钮挂到输入框（composer），轮询等待输入框出现；强刷按钮挂顶栏
         mountComposerShotButton();
         mountRefButtonTop();
-        ensureComposerFileButton();
         hookComposerDrop();
         hookDocumentDrop();
+        startIconObserver();
         var composerTimer = setInterval(function () {
           mountComposerShotButton();
-          ensureComposerFileButton();
         }, 800);
         ctx.effect(function () {
           return function () {
@@ -914,10 +1008,9 @@ window.__ModuleLoader__.load({
             clearInterval(refGuard);
             if (hideTimer) clearTimeout(hideTimer);
             if (videoObs) videoObs.disconnect();
+            if (ficonObs) ficonObs.disconnect();
             if (btn.parentNode) btn.parentNode.removeChild(btn);
             if (shotBtn.parentNode) shotBtn.parentNode.removeChild(shotBtn);
-            if (fileBtn.parentNode) fileBtn.parentNode.removeChild(fileBtn);
-            if (fileInput.parentNode) fileInput.parentNode.removeChild(fileInput);
             if (refBtn.parentNode) refBtn.parentNode.removeChild(refBtn);
             if (panel.parentNode) panel.parentNode.removeChild(panel);
             if (style.parentNode) style.parentNode.removeChild(style);
