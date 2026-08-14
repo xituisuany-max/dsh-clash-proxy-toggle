@@ -122,6 +122,16 @@ window.__ModuleLoader__.load({
       }
       var composerShotMounted = false;
       var fallbackMounted = false;
+      // 截图按钮固定圆形样式（白底金边，与 + / 盾牌圆形按钮一致，保证可见）
+      var SHOTBTN_CIRCLE = [
+        "width:28px", "height:28px", "padding:0", "flex:none",
+        "display:inline-flex", "align-items:center", "justify-content:center",
+        "border-radius:50%", "cursor:pointer",
+        "background:var(--dsw-alias-bg-module-platform,#ffffff)",
+        "border:1px solid var(--dsw-alias-border-l2,rgba(176,141,79,.6))",
+        "color:var(--dsw-alias-label-secondary,#4a5670)",
+        "transition:background .15s,border-color .15s",
+      ].join(";");
       function diag(msg) {
         try { fetch(BRIDGE + "/debug", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msg: msg }), cache: "no-store" }).catch(function () {}); } catch (e) {}
       }
@@ -187,7 +197,7 @@ window.__ModuleLoader__.load({
         for (var s = 0; s < clickables.length; s++) { if (isShieldBtn(clickables[s])) { shield = clickables[s]; break; } }
         if (shield) {
           shield.insertAdjacentElement("afterend", shotBtn);
-          copyButtonStyle(shield, shotBtn);
+          shotBtn.style.cssText = SHOTBTN_CIRCLE;
           diag("shot placed after SHIELD (found=" + clickables.length + ")");
         } else {
           // 2) 找"+"，插到它文档顺序的下一个按钮（盾牌）右边
@@ -206,7 +216,7 @@ window.__ModuleLoader__.load({
             }
             if (!target) target = plus;
             target.insertAdjacentElement("afterend", shotBtn);
-            copyButtonStyle(target, shotBtn);
+            shotBtn.style.cssText = SHOTBTN_CIRCLE;
             diag("shot after tag=" + target.tagName + " cls=" + String(target.className || "").slice(0, 30));
           } else {
             // 3) 兜底：第一个方形小按钮之后
@@ -216,7 +226,7 @@ window.__ModuleLoader__.load({
               var bs = btn.getBoundingClientRect();
               if (bs.width > 18 && bs.width < 46 && Math.abs(bs.width - bs.height) < 6) { anchor = btn; break; }
             }
-            if (anchor) { anchor.insertAdjacentElement("afterend", shotBtn); copyButtonStyle(anchor, shotBtn); }
+            if (anchor) { anchor.insertAdjacentElement("afterend", shotBtn); shotBtn.style.cssText = SHOTBTN_CIRCLE; }
             else C.insertBefore(shotBtn, C.firstChild);
           }
         }
