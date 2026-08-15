@@ -153,14 +153,14 @@ window.__ModuleLoader__.load({
       refBtn.title = "强制刷新页面（等价 Ctrl+F5，加载插件最新代码）";
       refBtn.setAttribute("aria-label", "强制刷新");
       refBtn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
-      // 纯白样式（顶栏深色背景上醒目）
+      // 深蓝底（与顶框同色）+ 白色刷新箭头
       var REFBTN_INLINE = [
         "width:26px", "height:26px", "padding:0", "flex:none",
         "display:inline-flex", "align-items:center", "justify-content:center",
         "border-radius:7px", "cursor:pointer",
-        "color:#ffffff", "background:rgba(255,255,255,.14)",
-        "border:1px solid rgba(255,255,255,.30)",
-        "transition:background .15s,border-color .15s",
+        "color:#ffffff", "background:var(--dsw-alias-accent,#1f3a8a)",
+        "border:1px solid rgba(255,255,255,.25)",
+        "transition:background .15s,border-color .15s,opacity .15s",
       ].join(";");
       refBtn.style.cssText = REFBTN_INLINE;
       refBtn.addEventListener("click", hardRefresh);
@@ -405,7 +405,7 @@ window.__ModuleLoader__.load({
         if (target) {
           // 优先：插入到"标准模式"元素后面（顶栏内联），强化样式确保可见
           refBtn.setAttribute("data-ref-top", "1");
-          refBtn.style.cssText = REFBTN_INLINE + ";position:relative;display:inline-flex;vertical-align:middle;margin-left:6px;background:var(--dsw-alias-bg-module-platform,#fff);border:1px solid var(--dsw-alias-border-l2,rgba(77,107,254,.3));border-radius:7px;box-shadow:0 1px 4px rgba(0,0,0,.12)";
+          refBtn.style.cssText = REFBTN_INLINE + ";position:relative;display:inline-flex;vertical-align:middle;margin-left:6px;background:var(--dsw-alias-accent,#1f3a8a);border:1px solid rgba(255,255,255,.25);box-shadow:0 1px 4px rgba(0,0,0,.12)";
           if (refBtn.parentNode && !refBtn.dataset.refTop) refBtn.parentNode.removeChild(refBtn);
           target.insertAdjacentElement("afterend", refBtn);
           refMountedTop = true;
@@ -413,7 +413,7 @@ window.__ModuleLoader__.load({
         } else {
           // 兜底：fixed 定位，放在代理开关（右上角鲸鱼，top:100px right:14px 宽44px）左侧并排同一水平线
           refBtn.removeAttribute("data-ref-top");
-          refBtn.style.cssText = REFBTN_INLINE + ";position:fixed;top:100px;right:64px;z-index:9999;background:var(--dsw-alias-bg-module-platform,#fff);border:1px solid var(--dsw-alias-border-l2,rgba(77,107,254,.3));border-radius:7px;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+          refBtn.style.cssText = REFBTN_INLINE + ";position:fixed;top:100px;right:64px;z-index:9999;background:var(--dsw-alias-accent,#1f3a8a);border:1px solid rgba(255,255,255,.25);box-shadow:0 2px 8px rgba(0,0,0,.15)";
           if (!refBtn.parentNode) document.body.appendChild(refBtn);
           refMountedTop = true;
           diag("ref mounted beside proxy whale (right:64px)");
