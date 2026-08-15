@@ -357,70 +357,20 @@ window.__ModuleLoader__.load({
       }, 1000);
       var fallbackGuard = setInterval(function () { if (composerShotMounted) clearInterval(fallbackTimer); }, 25000);
 
-      // 强刷按钮：fixed 定位挂在代理开关（右上角鲸鱼）上方，可靠不依赖顶栏结构
+      // 强刷按钮：fixed 定位在代理开关（右上角鲸鱼，top:100px right:14px）正下方
       var refMountedTop = false;
       function mountRefButtonTop() {
         if (refBtn.isConnected && refBtn.dataset.refTop) return;
-        if (refBtn.isConnected && !refBtn.dataset.refTop) { /* 兜底位置，允许顶栏取代 */ }
-        var all = document.querySelectorAll("body *");
-        var target = null;
-        // 首选：含"标准模式"文本的最内层元素（稳定，不依赖 CSS 哈希类名）
-        for (var i = 0; i < all.length; i++) {
-          var el = all[i];
-          if (el.offsetParent === null) continue;
-          var txt = (el.textContent || "").replace(/\s/g, "");
-          if (txt.indexOf("标准模式") < 0) continue;
-          var hasInner = false;
-          for (var c = 0; c < el.children.length; c++) {
-            if (((el.children[c].textContent || "").replace(/\s/g, "")).indexOf("标准模式") >= 0) { hasInner = true; break; }
-          }
-          if (!hasInner) { target = el; break; }  // 最内层
-        }
-        if (!target) {
-          // 次选：精确匹配已知容器类（wSkVaw_headerActions / SVAs4q_label）
-          for (var i = 0; i < all.length; i++) {
-            var el = all[i];
-            if (el.offsetParent === null) continue;
-            var cls = (el.className || "").toString();
-            if (/headerActions|SVAs4q_label/.test(cls)) { target = el; break; }
-          }
-        }
-        if (!target) {
-          // 备选：顶栏里含"DeepSeek"/模型名/自动识图的最内层元素（放宽 children 限制）
-          for (var j = 0; j < all.length; j++) {
-            var e2 = all[j];
-            if (e2.offsetParent === null) continue;
-            var rect = e2.getBoundingClientRect();
-            if (rect.top > 90 || rect.height > 60) continue;
-            var t2 = (e2.textContent || "").replace(/\s/g, "");
-            if (t2.length < 1 || t2.length > 40) continue;
-            if (!/DeepSeek|V4|High|模型|识图|自动|标准|模式|选择|预设|Agent|agent|会话|session|标题/.test(t2)) continue;
-            var hasInner2 = false;
-            for (var c2 = 0; c2 < e2.children.length; c2++) {
-              if (/DeepSeek|V4|High|模型|识图|自动|标准|模式|选择|预设|Agent|agent|会话/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
-            }
-            if (!hasInner2 && e2.children.length <= 6 && t2.length >= 2) { target = e2; break; }
-          }
-        }
-        if (target) {
-          // 优先：插入到"标准模式"元素后面（顶栏内联），强化样式确保可见
-          refBtn.setAttribute("data-ref-top", "1");
-          refBtn.style.cssText = REFBTN_INLINE + ";position:relative;display:inline-flex;vertical-align:middle;margin-left:6px;background:var(--dsw-alias-accent,#1f3a8a);border:1px solid rgba(255,255,255,.25);box-shadow:0 1px 4px rgba(0,0,0,.12)";
-          if (refBtn.parentNode && !refBtn.dataset.refTop) refBtn.parentNode.removeChild(refBtn);
-          target.insertAdjacentElement("afterend", refBtn);
-          refMountedTop = true;
-          diag("ref mounted next to innermost: " + (target.textContent || "").trim().slice(0, 12) + " tag=" + target.tagName + " cls=" + (target.className || "").toString().slice(0, 30));
-        } else {
-          // 兜底：fixed 定位，放在代理开关（右上角鲸鱼，top:100px right:14px 宽44px）左侧并排同一水平线
-          refBtn.removeAttribute("data-ref-top");
-          refBtn.style.cssText = REFBTN_INLINE + ";position:fixed;top:100px;right:64px;z-index:9999;background:var(--dsw-alias-accent,#1f3a8a);border:1px solid rgba(255,255,255,.25);box-shadow:0 2px 8px rgba(0,0,0,.15)";
-          if (!refBtn.parentNode) document.body.appendChild(refBtn);
-          refMountedTop = true;
-          diag("ref mounted beside proxy whale (right:64px)");
-        }
+        if (refBtn.isConnected && !refBtn.dataset.refTop) { /* 允许重挂 */ }
+        // 固定：挂到代理开关（右上角鲸鱼 top:100px right:14px 宽44px）正下方，水平居中于鲸鱼
+        refBtn.setAttribute("data-ref-top", "1");
+        refBtn.style.cssText = REFBTN_INLINE + ";position:fixed;top:150px;right:23px;z-index:9999;background:var(--dsw-alias-accent,#1f3a8a);border:1px solid rgba(255,255,255,.25);box-shadow:0 2px 8px rgba(0,0,0,.15)";
+        if (refBtn.parentNode !== document.body) document.body.appendChild(refBtn);
+        refMountedTop = true;
+        diag("ref mounted below proxy whale (top:150px right:14px)");
       }
       var refTimer = setInterval(function () {
-        // 始终优先顶栏：若已挂顶栏且连接，跳过；否则重新尝试（兜底 fixed 也允许被顶栏取代）
+        // 已挂载且连接则跳过，否则重试
         if (refBtn.isConnected && refBtn.dataset.refTop) return;
         mountRefButtonTop();
       }, 1000);
