@@ -24,6 +24,13 @@ window.__ModuleLoader__.load({
     var ACTIONS = {
       idle:     { fps: 8,  loop: true,  prio: 99 },
       sit:      { fps: 8,  loop: true,  prio: 99 },   // 坐姿待机（吸附在输入框上方时）
+      // 坐姿专属动作（仅 sit 基线时触发）
+      sit_happy:    { fps: 8,  loop: false, prio: 0,  particle: "heart" },
+      sit_wave:     { fps: 8,  loop: false, prio: 0 },
+      sit_think:    { fps: 8,  loop: true,  prio: 1 },
+      sit_sleep:    { fps: 8,  loop: true,  prio: 1,  sleep: true, particle: "zzz" },
+      sit_eat:      { fps: 8,  loop: false, prio: 0 },
+      sit_stretch:  { fps: 8,  loop: false, prio: 3 },
       happy:    { fps: 12, loop: false, prio: 0,  particle: "heart" },
       wave:     { fps: 8,  loop: false, prio: 0 },
       sleep:    { fps: 8,  loop: true,  prio: 1,  sleep: true, particle: "zzz" },
@@ -86,7 +93,7 @@ window.__ModuleLoader__.load({
     }
 
     // ============ 偏好持久化 ============
-    var prefs = { scale: 1, opacity: 1, lines: true, hourly: true, random: true, night: true, left: null, top: null, snapId: null };
+    var prefs = { scale: 1, opacity: 1, lines: true, hourly: true, random: true, night: true, left: null, top: null, snapId: null, budget: 200000 };
     try {
       var saved = JSON.parse(localStorage.getItem(PREFS_KEY) || "null");
       if (saved) for (var k in saved) if (k in prefs) prefs[k] = saved[k];
@@ -118,6 +125,15 @@ window.__ModuleLoader__.load({
       var frameTimer = null, frameIdx = 0, frameList = [];
       var playToken = 0;
       var currentBaseline = "idle"; // 当前基线动作（吸附输入框上方=sit，否则 idle）
+      // 坐姿映射：sit 基线时，日常动作自动切换到坐姿版（仅坐姿触发）
+      var SIT_VARIANTS = { happy: "sit_happy", wave: "sit_wave", think: "sit_think", sleep: "sit_sleep", eat: "sit_eat", stretch: "sit_stretch" };
+      function resolveAction(name) {
+        if (currentBaseline === "sit" && SIT_VARIANTS[name]) return SIT_VARIANTS[name];
+        return name;
+      }
+      function isThinkNow() { return current.name === "think" || current.name === "sit_think"; }
+      function isSleepNow() { var s = ACTIONS[current.name]; return !!(s && s.sleep); }
+      function isBaselineNow() { return current.name === currentBaseline; }
 
       function setCurrent(name, prio) {
         current.name = name;
@@ -126,6 +142,7 @@ window.__ModuleLoader__.load({
 
       function playAction(name, opts) {
         opts = opts || {};
+        name = resolveAction(name); // 坐姿时映射到坐姿版动作
         var spec = ACTIONS[name] || { fps: 8, loop: false, prio: 99 };
         var prio = opts.prio != null ? opts.prio : spec.prio;
         if (!name || name === current.name) return;
@@ -290,17 +307,87 @@ window.__ModuleLoader__.load({
         idleTimer = setInterval(function () {
           try {
             var now = Date.now();
-            if (now - lastUserActivity > IDLE_MS && !lastRunning && current.name !== "sleep" && current.name !== "drag" && current.name !== "think") {
+            if (now - lastUserActivity > IDLE_MS && !lastRunning && !isSleepNow() && current.name !== "drag" && !isThinkNow()) {
               playActionFx("sleep", { prio: 1 });
               if (!deepSlept) showBubble(LINES.sleep[Math.floor(Math.random() * LINES.sleep.length)], 2600);
             }
-            if (now - lastUserActivity > IDLE_DEEP_MS && deepSlept !== true && current.name === "sleep") {
+            if (now - lastUserActivity > IDLE_DEEP_MS && deepSlept !== true && isSleepNow()) {
               deepSlept = true;
               say("idle_deep", 2200);
             }
             if (now - lastUserActivity <= IDLE_MS) deepSlept = false;
           } catch (e) { dbg("idle err: " + e.message); }
         }, IDLE_CHECK_MS);
+      }
+
+      // ---------- Token 统计（今日用量 = 各会话 tokenUsage 投影差值记账） ----------
+      var TOKEN_KEY = "dshPetTokens.v1";
+      var tokenState = { date: "", daily: 0, baselines: {} };
+      var tokenReportAt = Date.now() + 10 * 60000 + Math.random() * 20 * 60000;
+      function todayStr() { try { return new Date().toISOString().slice(0, 10); } catch (e) { return ""; } }
+      function loadTokenState() {
+        try {
+          var s = JSON.parse(localStorage.getItem(TOKEN_KEY) || "null");
+          if (s && s.date) tokenState = s;
+        } catch (e) {}
+        var t = todayStr();
+        if (tokenState.date !== t) {
+          tokenState = { date: t, daily: 0, baselines: {} }; // 跨天重置
+          saveTokenState();
+        }
+      }
+      function saveTokenState() { try { localStorage.setItem(TOKEN_KEY, JSON.stringify(tokenState)); } catch (e) {} }
+      function sumUsage(u) {
+        if (!u) return 0;
+        return (u.uncachedInputTokens || 0) + (u.outputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheWriteTokens || 0);
+      }
+      // 扫描全部会话：新会话记基线（不计入），已有会话的增量差值计入今日
+      function tallySessionTokens() {
+        try {
+          var sessions = ctx.get ? ctx.get("sessions") : undefined;
+          if (!sessions || !sessions.list) return;
+          var snap = sessions.list.getSnapshot ? sessions.list.getSnapshot() : null;
+          if (!snap || !snap.byId) return;
+          var changed = false;
+          for (var id in snap.byId) {
+            var s = snap.byId[id];
+            if (!s) continue;
+            var total = sumUsage(s.projectionValues && s.projectionValues.tokenUsage);
+            if (total <= 0) continue;
+            if (!(id in tokenState.baselines)) {
+              tokenState.baselines[id] = total;
+            } else if (total > tokenState.baselines[id]) {
+              tokenState.daily += total - tokenState.baselines[id];
+              tokenState.baselines[id] = total;
+              changed = true;
+            }
+          }
+          if (changed) saveTokenState();
+        } catch (e) { dbg("token tally err: " + e.message); }
+      }
+      function fmtTokens(n) {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+        if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+        return String(n);
+      }
+      function tokenRemain() {
+        var budget = prefs.budget != null ? prefs.budget : 200000;
+        return Math.max(0, budget - tokenState.daily);
+      }
+      // 汇报：随机时间触发，汇报时播吃白饭动作（坐姿自动映射 sit_eat）
+      function tokenReport() {
+        tallySessionTokens();
+        var used = tokenState.daily;
+        var remain = tokenRemain();
+        dbg("token report: used=" + used + " remain=" + remain);
+        showBubble("🍚 今日已用 " + fmtTokens(used) + " tokens，剩余 " + fmtTokens(remain) + "~", 3800);
+        playActionFx("eat", { prio: 1 });
+      }
+      function tokenTick() {
+        if (Date.now() >= tokenReportAt) {
+          tokenReportAt = Date.now() + 15 * 60000 + Math.random() * 25 * 60000; // 下次 15-40 分钟后
+          tokenReport();
+        }
       }
 
       // ---------- 时间型触发 ----------
@@ -319,8 +406,10 @@ window.__ModuleLoader__.load({
           lastNightRemind = dateStr;
           var pool2 = LINES.night;
           showBubble(pool2[Math.floor(Math.random() * pool2.length)], 3000);
-          if (Math.random() < 0.5 && current.prio > 0 && current.name !== "sleep") playActionFx("sleep", { prio: 2 });
+          if (Math.random() < 0.5 && current.prio > 0 && !isSleepNow()) playActionFx("sleep", { prio: 2 });
         }
+        // token 随机汇报（不受整点/深夜开关影响，独立随机节奏）
+        tokenTick();
       }
 
       // ---------- 随机小动作 + 思考干饭 ----------
@@ -331,7 +420,7 @@ window.__ModuleLoader__.load({
         var now = Date.now();
         // 思考中偶尔干饭：思考稳定 10s 后，每 8-15s 掷一次骰（40% 概率），
         // 触发后冷却 30-60s；eat(0) 打断 think(1) 会自动记 resumeOnDone=think，吃完继续思考
-        if (lastRunning && current.name === "think" && now >= eatCheckAt && now - runningSince > 10000) {
+        if (lastRunning && isThinkNow() && now >= eatCheckAt && now - runningSince > 10000) {
           eatCheckAt = now + 8000 + Math.random() * 7000;
           if (Math.random() < 0.4) {
             eatCheckAt = now + 30000 + Math.random() * 30000;
@@ -343,9 +432,9 @@ window.__ModuleLoader__.load({
         }
         if (now < nextMicroAt) return;
         if (now - lastUserActivity < 20000) { nextMicroAt = now + 30000; return; }
-        if (current.name !== "idle" && current.name !== "think") { nextMicroAt = now + 20000; return; }
+        if (!isBaselineNow() && !isThinkNow()) { nextMicroAt = now + 20000; return; }
         nextMicroAt = now + 40000 + Math.random() * 50000;
-        var pool = ["stretch", "blush", "wave"];
+        var pool = currentBaseline === "sit" ? ["stretch", "wave", "happy"] : ["stretch", "blush", "wave"];
         var pick = pool[Math.floor(Math.random() * pool.length)];
         playActionFx(pick, { prio: 3 });
       }
@@ -394,7 +483,7 @@ window.__ModuleLoader__.load({
               lastUserActivity = Date.now();
               dbg("user activity, reset idle");
               if (!greeted) { greeted = true; sayGreeting(); }
-              if (current.name === "sleep") {
+              if (isSleepNow()) {
                 setCurrent(null, 99); // 唤醒：绕过 sleep 守卫，回到当前基线（站姿/坐姿）
                 playAction(currentBaseline);
                 say("wake", 1800);
@@ -438,7 +527,7 @@ window.__ModuleLoader__.load({
               showBubble(LINES.start[Math.floor(Math.random() * LINES.start.length)], 2200);
             } else if (running) {
               // 长任务：60s 后从 think 切 wait
-              if (current.name === "think" && Date.now() - runningSince > 60000) {
+              if (isThinkNow() && Date.now() - runningSince > 60000) {
                 playAction("wait", { prio: 1 });
               }
               // 审批等待 → wait；审批结束 → 回 think
@@ -469,13 +558,17 @@ window.__ModuleLoader__.load({
                   dbg("turn finished -> dance");
                   showBubble("完美！跳个舞庆祝~ 🎶", 2600);
                   playActionFx("dance", { prio: 1 });
+                } else if (Math.random() < 0.15) {
+                  // 任务完成时小概率汇报 token（边吃白饭边汇报）
+                  dbg("turn finished -> token report");
+                  tokenReport();
                 } else {
                   dbg("turn finished -> happy");
                   say("done", 2600);
                   playActionFx("happy", { prio: 1 });
                 }
               }
-            } else if (!running && (current.name === "think" || current.name === "wait")) {
+            } else if (!running && (isThinkNow() || current.name === "wait")) {
               playAction(currentBaseline);
             }
             lastRunning = running;
@@ -682,7 +775,7 @@ window.__ModuleLoader__.load({
 
       pet.addEventListener("mousedown", function (e) {
         if (e.button !== 0) return;
-        closeMenu(); closePanel();
+        closeMenu(); closePanel(); closePicker();
         dragging = true;
         moved = false;
         longPressed = false;
@@ -759,14 +852,16 @@ window.__ModuleLoader__.load({
       }
       pet.addEventListener("click", function (e) { e.stopPropagation(); });
 
-      // 双击循环切换
-      var EXTRA_ACTIONS = ["wave", "sleep", "cry", "dance", "angry", "blush"];
-      var EXTRA_NAMES = { wave: "挥手打招呼~", sleep: "有点困了…Zzz", cry: "呜…QAQ", dance: "来跳支舞~", angry: "哼！生气了！", blush: "呜…好害羞>///<" };
+      // 双击循环切换（坐姿时只在坐姿动作间循环）
+      var EXTRA_ACTIONS_STAND = ["wave", "sleep", "cry", "dance", "angry", "blush"];
+      var EXTRA_ACTIONS_SIT = ["wave", "sleep", "happy", "stretch"];
+      var EXTRA_NAMES = { wave: "挥手打招呼~", sleep: "有点困了…Zzz", cry: "呜…QAQ", dance: "来跳支舞~", angry: "哼！生气了！", blush: "呜…好害羞>///<", happy: "开心拍手~", stretch: "伸个懒腰~" };
       var extraIdx = -1;
       pet.addEventListener("dblclick", function () {
         if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-        extraIdx = (extraIdx + 1) % EXTRA_ACTIONS.length;
-        var name = EXTRA_ACTIONS[extraIdx];
+        var list = currentBaseline === "sit" ? EXTRA_ACTIONS_SIT : EXTRA_ACTIONS_STAND;
+        extraIdx = (extraIdx + 1) % list.length;
+        var name = list[extraIdx];
         playActionFx(name, { prio: 0 });
         showBubble(EXTRA_NAMES[name], 1800);
       });
@@ -778,7 +873,7 @@ window.__ModuleLoader__.load({
           hoverTimer = null;
           var now = Date.now();
           if (now - hoverFiredAt < 30000) return;
-          if (current.name !== "idle" && current.name !== "think") return;
+          if (!isBaselineNow() && !isThinkNow()) return;
           if (Math.random() < 0.5) {
             hoverFiredAt = now;
             playAction("wave", { prio: 0 });
@@ -809,6 +904,126 @@ window.__ModuleLoader__.load({
         d.addEventListener("click", function (e) { e.stopPropagation(); closeMenu(); onClick(); });
         return d;
       }
+      // ---------- 动作点播：滑动选择器 ----------
+      var PICKER_NAMES = { idle: "待机", sit: "坐姿待机", happy: "开心", wave: "挥手", sleep: "睡觉", cry: "哭哭", think: "思考", drag: "拖拽", eat: "干饭", dance: "跳舞", blush: "害羞", surprise: "惊吓", stretch: "伸懒腰", angry: "生气", music: "唱歌", swim: "游泳", wait: "等待", sit_happy: "坐姿拍手", sit_wave: "坐姿挥手", sit_think: "坐姿思考", sit_sleep: "坐姿瞌睡", sit_eat: "坐姿干饭", sit_stretch: "坐姿伸懒腰" };
+      var PICKER_EMOJI = { idle: "🧍", sit: "🧘", happy: "😊", wave: "👋", sleep: "😴", cry: "😢", think: "🤔", drag: "✋", eat: "🍚", dance: "💃", blush: "😳", surprise: "😲", stretch: "🙆", angry: "😠", music: "🎵", swim: "🏊", wait: "⏳", sit_happy: "🎉", sit_wave: "👋", sit_think: "🤔", sit_sleep: "😪", sit_eat: "🍚", sit_stretch: "🙆" };
+      var picker = null, pickerIdx = 0, pickerOrder = [];
+      var PICKER_ITEM_H = 46;
+      function closePicker() {
+        if (!picker) return;
+        window.removeEventListener("mousemove", pickerDragMove);
+        window.removeEventListener("mouseup", pickerDragUp);
+        if (picker.parentNode) picker.parentNode.removeChild(picker);
+        picker = null;
+      }
+      function openActionPicker() {
+        closePicker();
+        closeMenu(); closePanel();
+        // 当前基线对应的动作排前面
+        var sit = currentBaseline === "sit";
+        pickerOrder = sit
+          ? ["sit", "sit_happy", "sit_wave", "sit_think", "sit_sleep", "sit_eat", "sit_stretch", "idle", "happy", "wave", "sleep", "cry", "think", "eat", "dance", "blush", "surprise", "stretch", "angry", "music", "swim", "wait", "drag"]
+          : ["idle", "happy", "wave", "sleep", "cry", "think", "eat", "dance", "blush", "surprise", "stretch", "angry", "music", "swim", "wait", "drag", "sit", "sit_happy", "sit_wave", "sit_think", "sit_sleep", "sit_eat", "sit_stretch"];
+        pickerIdx = 0;
+        picker = document.createElement("div");
+        picker.setAttribute("data-dsh-pet", "picker");
+        picker.style.cssText = [
+          "position:fixed", "z-index:2147483646", "width:240px", "height:300px",
+          "left:50%", "top:50%", "transform:translate(-50%,-50%)", "overflow:hidden",
+          "background:var(--dsw-alias-bg-module-platform,#fff)",
+          "border:1px solid var(--dsw-alias-border-l2,rgba(77,107,254,.3))",
+          "border-radius:14px", "box-shadow:0 12px 32px rgba(0,0,0,.28)",
+          "user-select:none", "cursor:grab",
+        ].join(";");
+        // 标题
+        var title = document.createElement("div");
+        title.textContent = "🎬 滑动选择动作（滚轮/拖动，点击播放）";
+        title.style.cssText = "position:absolute;top:10px;left:0;right:0;text-align:center;font-size:12px;color:var(--dsw-alias-label-secondary,#8a94a6);pointer-events:none";
+        picker.appendChild(title);
+        // 中间高亮条
+        var hl = document.createElement("div");
+        hl.style.cssText = "position:absolute;left:10px;right:10px;top:50%;height:" + PICKER_ITEM_H + "px;transform:translateY(-50%);border-radius:10px;background:var(--dsw-alias-bg-hover,rgba(77,107,254,.12));border:1px solid var(--dsw-alias-border-l2,rgba(77,107,254,.35));pointer-events:none";
+        picker.appendChild(hl);
+        // 列表
+        var listEl = document.createElement("div");
+        listEl.style.cssText = "position:absolute;left:0;right:0;top:0;transition:transform .18s ease-out";
+        pickerOrder.forEach(function (a, i) {
+          var d = document.createElement("div");
+          d.style.cssText = "height:" + PICKER_ITEM_H + "px;display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;color:var(--dsw-alias-label-primary,#1c2333);cursor:pointer;transition:transform .18s ease-out,opacity .18s ease-out";
+          var em = document.createElement("span"); em.textContent = PICKER_EMOJI[a] || "▶";
+          em.style.fontSize = "20px";
+          var nm = document.createElement("span"); nm.textContent = PICKER_NAMES[a] || a;
+          d.appendChild(em); d.appendChild(nm);
+          d.addEventListener("click", function (e) {
+            e.stopPropagation();
+            pickerIdx = i;
+            playActionFx(a, { prio: 0 });
+            showBubble("「" + (PICKER_NAMES[a] || a) + "」", 1500);
+            closePicker();
+          });
+          listEl.appendChild(d);
+        });
+        picker.appendChild(listEl);
+        document.body.appendChild(picker);
+        // 渲染 + 实时预览
+        function render() {
+          var y = (picker.clientHeight / 2 - PICKER_ITEM_H / 2) - pickerIdx * PICKER_ITEM_H;
+          listEl.style.transform = "translateY(" + y + "px)";
+          var kids = listEl.children;
+          for (var i = 0; i < kids.length; i++) {
+            var off = i - pickerIdx;
+            kids[i].style.opacity = off === 0 ? "1" : "0.4";
+            kids[i].style.transform = off === 0 ? "scale(1.1)" : "scale(1)";
+          }
+          var act = pickerOrder[pickerIdx];
+          if (act) playActionFx(act, { prio: 0 }); // 滑动即实时预览
+        }
+        function move(delta) {
+          pickerIdx = Math.max(0, Math.min(pickerOrder.length - 1, pickerIdx + delta));
+          render();
+        }
+        // 滚轮切换（节流）
+        var wheelLock = 0;
+        picker.addEventListener("wheel", function (e) {
+          e.preventDefault();
+          var now = Date.now();
+          if (now - wheelLock < 150) return;
+          wheelLock = now;
+          move(e.deltaY > 0 ? 1 : -1);
+        }, { passive: false });
+        // 拖拽滑动
+        var dragY = null, dragBase = 0, dragAcc = 0;
+        window.pickerDragMove = function (e) {
+          if (dragY === null) return;
+          var dy = e.clientY - dragY;
+          dragAcc = dy;
+          var steps = Math.round(dy / PICKER_ITEM_H);
+          var ni = Math.max(0, Math.min(pickerOrder.length - 1, dragBase - steps));
+          if (ni !== pickerIdx) { pickerIdx = ni; render(); }
+        };
+        window.pickerDragUp = function () {
+          if (dragY === null) return;
+          dragY = null;
+          if (Math.abs(dragAcc) > 10 && Math.abs(dragAcc) < PICKER_ITEM_H / 2) {
+            move(dragAcc < 0 ? 1 : -1);
+          }
+        };
+        window.addEventListener("mousemove", window.pickerDragMove);
+        window.addEventListener("mouseup", window.pickerDragUp);
+        picker.addEventListener("mousedown", function (e) {
+          if (e.button !== 0) return;
+          dragY = e.clientY; dragBase = pickerIdx; dragAcc = 0;
+          picker.style.cursor = "grabbing";
+        });
+        // 外部点击关闭
+        setTimeout(function () {
+          document.addEventListener("click", function h() {
+            document.removeEventListener("click", h);
+            closePicker();
+          });
+        }, 80);
+        render();
+      }
       function openMenu(x, y) {
         closeMenu();
         menu = document.createElement("div");
@@ -816,30 +1031,7 @@ window.__ModuleLoader__.load({
         menu.style.position = "fixed";
         menu.style.left = Math.min(x, window.innerWidth - 160) + "px";
         menu.style.top = Math.min(y, window.innerHeight - 240) + "px";
-        // 动作点播
-        var order = ["happy", "wave", "sleep", "cry", "think", "eat", "dance", "blush", "surprise", "stretch", "angry", "music", "swim", "wait", "drag"];
-        var names = { happy: "开心", wave: "挥手", sleep: "睡觉", cry: "哭哭", think: "思考", eat: "干饭", dance: "跳舞", blush: "害羞", surprise: "惊吓", stretch: "伸懒腰", angry: "生气", music: "唱歌", swim: "游泳", wait: "等待", drag: "拖拽" };
-        var sub = document.createElement("div");
-        sub.textContent = "🎬 动作点播 ▸";
-        sub.style.fontWeight = "600";
-        sub.addEventListener("click", function (e) {
-          e.stopPropagation();
-          var list = document.createElement("div");
-          list.setAttribute("data-dsh-pet", "menu");
-          list.style.position = "fixed";
-          list.style.left = Math.min(menu.getBoundingClientRect().left + 120, window.innerWidth - 140) + "px";
-          list.style.top = menu.getBoundingClientRect().top + "px";
-          order.forEach(function (a) {
-            list.appendChild(menuItem("▶ " + names[a], function () { playActionFx(a, { prio: 0 }); showBubble("「" + names[a] + "」", 1500); }));
-          });
-          document.body.appendChild(list);
-          setTimeout(function () { closeMenu(); }, 120);
-          document.addEventListener("click", function h() {
-            document.removeEventListener("click", h);
-            setTimeout(function () { if (list.parentNode) list.parentNode.removeChild(list); }, 50);
-          });
-        });
-        menu.appendChild(sub);
+        menu.appendChild(menuItem("🎬 动作点播（滑动选择）", openActionPicker));
         var sep = document.createElement("div"); sep.className = "sep"; menu.appendChild(sep);
         menu.appendChild(menuItem("⚙ 设置…", openPanel));
         menu.appendChild(menuItem("📍 重置位置", function () { applySnap({ id: "corner-br", x: window.innerWidth - pet.getBoundingClientRect().width - 16, y: window.innerHeight - pet.getBoundingClientRect().height - 16 }, true); }));
@@ -903,6 +1095,17 @@ window.__ModuleLoader__.load({
         toggle("整点报时", "hourly");
         toggle("随机小动作", "random");
         toggle("深夜提醒", "night");
+        // 每日 token 预算（剩余 = 预算 - 今日用量）
+        var bud = document.createElement("input");
+        bud.type = "number"; bud.min = "1000"; bud.step = "10000";
+        bud.value = prefs.budget != null ? prefs.budget : 200000;
+        bud.style.width = "110px";
+        bud.addEventListener("change", function () {
+          prefs.budget = Math.max(1000, parseInt(bud.value, 10) || 200000);
+          savePrefs();
+          showBubble("预算设为 " + fmtTokens(prefs.budget) + " tokens~", 2200);
+        });
+        panel.appendChild(row("每日预算(tokens)", bud));
         // 按钮
         var rowB = document.createElement("div"); rowB.className = "row";
         var b1 = document.createElement("button"); b1.textContent = "重置位置";
@@ -964,7 +1167,10 @@ window.__ModuleLoader__.load({
         window.addEventListener("resize", onResize);
         hookSessions();
         startIdleCheck();
-        // 时间型定时器（每 20s 检查整点/深夜）
+        // Token 统计初始化
+        loadTokenState();
+        setTimeout(function () { tallySessionTokens(); }, 1000);
+        // 时间型定时器（每 20s 检查整点/深夜/token 汇报）
         hourlyTimer = setInterval(hourlyTick, 20000);
         lastChimeHour = new Date().getHours();
         try { lastNightRemind = new Date().toLocaleDateString(); } catch (e) {}
@@ -985,6 +1191,7 @@ window.__ModuleLoader__.load({
           if (menu && menu.parentNode) menu.parentNode.removeChild(menu);
           if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
           if (chip && chip.parentNode) chip.parentNode.removeChild(chip);
+          closePicker();
           if (sessionUnsub) { try { sessionUnsub(); } catch (e) {} sessionUnsub = null; }
           if (idleTimer) { clearInterval(idleTimer); idleTimer = null; }
           if (hourlyTimer) { clearInterval(hourlyTimer); hourlyTimer = null; }
