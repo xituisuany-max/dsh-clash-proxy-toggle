@@ -161,3 +161,8 @@ dsh plugin --profile web add https://github.com/xituisuany-max/dsh-clash-proxy-t
 ## 馃搫 License
 
 [MIT](LICENSE)
+
+## 桌宠迁移说明
+
+鲸鱼娘桌宠（dsh-pet）已迁移至独立仓库：**https://github.com/xituisuany-max/dsh-client-ui-pet**
+本仓库仅保留 Clash 开关插件（dsh-plugin）、桥接（ridge）、启动器（launchers）。
