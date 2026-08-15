@@ -381,18 +381,32 @@ window.__ModuleLoader__.load({
           for (var j = 0; j < all.length; j++) {
             var e2 = all[j];
             if (e2.offsetParent === null) continue;
+            var rect = e2.getBoundingClientRect();
+            // 只看顶部区域（y < 90）的短文本元素
+            if (rect.top > 90 || rect.height > 60) continue;
             var t2 = (e2.textContent || "").replace(/\s/g, "");
-            if (!/DeepSeek|V4|High|模型|识图|自动|标准|模式/.test(t2)) continue;
-            if (probeList.length < 20) probeList.push((e2.tagName || "") + ":" + t2.slice(0, 24));
+            if (t2.length < 1 || t2.length > 40) continue;
+            if (!/DeepSeek|V4|High|模型|识图|自动|标准|模式|选择|预设|Agent|agent|会话|session|标题/.test(t2)) continue;
+            if (probeList.length < 25) probeList.push((e2.tagName || "") + " <" + (e2.className || "").toString().slice(0, 30) + "> " + t2.slice(0, 22));
             var hasInner2 = false;
             for (var c2 = 0; c2 < e2.children.length; c2++) {
-              if (/DeepSeek|V4|High|模型|识图|自动|标准|模式/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
+              if (/DeepSeek|V4|High|模型|识图|自动|标准|模式|选择|预设|Agent|agent|会话/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
             }
-            if (!hasInner2 && e2.children.length <= 6) { target = e2; break; }
+            if (!hasInner2 && e2.children.length <= 6 && t2.length >= 2) { target = e2; break; }
           }
           if (probeList.length && !window.__dshRefProbeLogged) {
             window.__dshRefProbeLogged = true;
             diag("TOP PROBE: " + probeList.slice(0, 12).join(" | "));
+            // 桌面端无控制台：浮层持续显示（含关闭按钮），供用户截图
+            try {
+              var ov = document.createElement("div");
+              ov.setAttribute("data-ref-probe", "1");
+              ov.style.cssText = "position:fixed;top:140px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#fff;border:2px solid #e00;border-radius:12px;padding:14px 18px;font-size:13px;color:#111;max-width:86vw;max-height:60vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.35);font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.6";
+              ov.innerHTML = "<b style='color:#e00'>TOP PROBE — 顶栏元素（截图发我）</b><br>" + probeList.slice(0, 15).map(function (s) { return "• " + s; }).join("<br>") + "<br><button data-ref-probe-close style='margin-top:10px;padding:4px 12px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer'>关闭</button>";
+              var closeBtn = ov.querySelector("[data-ref-probe-close]");
+              if (closeBtn) closeBtn.addEventListener("click", function () { if (ov.parentNode) ov.parentNode.removeChild(ov); });
+              document.body.appendChild(ov);
+            } catch (e) {}
           }
         }
         if (target) {
@@ -1008,6 +1022,33 @@ var FICON_DATA = {"video":"data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fw
         hookComposerDrop();
         hookDocumentDrop();
         startIconObserver();
+        // 独立顶栏探测（不依赖按钮挂载状态）：延迟等 React 渲染完成后，列出顶部元素供定位
+        setTimeout(function () {
+          try {
+            if (window.__dshTopProbeShown) return;
+            window.__dshTopProbeShown = true;
+            var list = [];
+            var els = document.querySelectorAll("body *");
+            for (var i = 0; i < els.length; i++) {
+              var el = els[i];
+              if (!el.offsetParent) continue;
+              var r = el.getBoundingClientRect();
+              if (r.top < 0 || r.top > 80 || r.height > 56) continue;
+              var txt = (el.textContent || "").replace(/\s+/g, " ").trim();
+              if (txt.length < 1 || txt.length > 40) continue;
+              var tag = (el.tagName || "") + "." + (el.className || "").toString().split(" ").slice(0, 2).join(".");
+              list.push(tag + " => " + txt.slice(0, 26));
+              if (list.length >= 30) break;
+            }
+            diag("TOP DUMP: " + JSON.stringify(list));
+            var ov = document.createElement("div");
+            ov.style.cssText = "position:fixed;top:150px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#fff;border:2px solid #e00;border-radius:12px;padding:14px 18px;font-size:12px;color:#111;max-width:88vw;max-height:62vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.35);font-family:Consolas,monospace;white-space:pre-wrap;line-height:1.5";
+            ov.innerHTML = "<b style='color:#e00'>TOP DUMP — 顶部元素（截图发我）</b><br>" + list.map(function (s) { return "• " + s; }).join("<br>") + "<br><button data-probe-close style='margin-top:10px;padding:4px 12px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer'>关闭</button>";
+            var cb = ov.querySelector("[data-probe-close]");
+            if (cb) cb.addEventListener("click", function () { if (ov.parentNode) ov.parentNode.removeChild(ov); });
+            document.body.appendChild(ov);
+          } catch (e) { diag("probe err: " + e.message); }
+        }, 2500);
         var composerTimer = setInterval(function () {
           mountComposerShotButton();
         }, 800);
