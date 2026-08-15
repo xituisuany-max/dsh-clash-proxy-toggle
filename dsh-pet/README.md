@@ -2,39 +2,82 @@
 
 一只住在 DSH Web GUI 角落的 Q 版蓝发女仆鲸鱼娘。
 
-## 功能
+## 功能（v0.3）
 
-- **可拖动 + 吸附角落**：拖到任意位置松手，自动吸附最近的屏幕角（4 角）
-- **浮动 + 呼吸动画**：常驻时轻微上下浮动、缓慢呼吸缩放
-- **5 个动作序列帧动画**（素材经本地 proxy-bridge `/media/pet/<action>_0/<n>.png` 提供）：
+- **可拖动 + 多吸附点**：拖到任意位置松手，自动吸附最近的目标——**4 个屏幕角 + 聊天输入框上方（左/中/右 3 个点）**，拖到输入框上方松开即吸附（"鲸鱼娘看着你输入"）；吸附位置持久化，刷新/窗口缩放后自动重新对齐；**快速甩出**会播放游泳动作并回弹归位
+- **17 个动作序列帧动画**（素材经本地 proxy-bridge `/media/pet/<action>_0/<n>.png` 提供）：
 
-  | 动作 | 目录 | 帧数 | 帧率 | 触发 |
+  | 动作 | 帧数 | 帧率 | 循环 | 触发 |
   |---|---|---|---|---|
-  | idle 待机 | `pet/idle_0/` | 41 | 8 fps | 默认循环 |
-  | happy 开心 | `pet/happy_0/` | 62 | 12 fps | 单击（蹦跳+台词气泡） |
-  | wave 挥手 | `pet/wave_0/` | 41 | 8 fps | 双击循环切换 |
-  | sleep 睡觉 | `pet/sleep_0/` | 41 | 8 fps | 双击循环切换 |
-  | cry 哭哭 | `pet/cry_0/` | 41 | 8 fps | 双击循环切换 |
+  | idle 待机 | 41 | 8 fps | ✅ | 默认（站姿） |
+  | sit 坐姿待机 | 41 | 8 fps | ✅ | 吸附在输入框上方时（全身坐姿，陪你输入） |
+  | happy 开心 | 62 | 12 fps | ❌ | 单击 / 任务完成 |
+  | wave 挥手 | 41 | 8 fps | ❌ | 双击循环 / 悬停小概率 / 窗口失焦 |
+  | sleep 睡觉 | 41 | 8 fps | ✅ | 双击循环 / 空闲 90s / 深夜小概率 |
+  | cry 哭哭 | 41 | 8 fps | ❌ | 双击循环 / 任务出错 |
+  | think 思考 | 41 | 8 fps | ✅ | agent 运行中 |
+  | drag 拖拽 | 41 | 8 fps | ✅ | 拖拽移动中 |
+  | eat 干饭 | 41 | 8 fps | ❌ | 关键词"吃/饿/干饭" / 右键点播 / **思考时偶尔干饭（吃完继续思考）** |
+  | dance 跳舞 | 62 | 12 fps | ✅ | 双击循环 / 任务成功且多工具时小概率 / 关键词"跳舞" |
+  | blush 害羞 | 41 | 8 fps | ❌ | 长按 600ms 摸摸头 / 双击循环 / 关键词"辛苦/摸摸/可爱" |
+  | surprise 惊吓 | 41 | 8 fps | ❌ | 任务开始瞬间 / 页面恢复可见 |
+  | stretch 伸懒腰 | 41 | 8 fps | ❌ | 随机小动作 |
+  | angry 生气 | 41 | 8 fps | ❌ | 双击循环 / 同一 turn 连续 2 次出错 / 关键词"生气" |
+  | music 唱歌 | 62 | 12 fps | ✅ | 双击循环 / 关键词"唱歌" |
+  | swim 游泳 | 41 | 8 fps | ✅ | 拖拽甩出 / 关键词"游泳" |
+  | wait 等待 | 41 | 8 fps | ✅ | 审批等待 / 长任务运行超 60s |
 
-- **单击**：蹦跳 + 随机台词气泡（`啊呜~ 好好吃！` / `主人辛苦啦！` 等）
-- **双击**：循环切换 wave → sleep → cry（带气泡提示动作名），播完自动回 idle；sleep 为循环动作
-- **明暗主题自适应**：气泡颜色跟随 DSH 主题变量
+- **鼠标交互**：
+  - **单击**：蹦跳 + 随机台词气泡
+  - **长按 600ms**：害羞摸头 + 「呜…好舒服~」
+  - **双击**：循环切换 wave → sleep → cry → dance → angry → blush（带气泡提示）
+  - **悬停 1.5s**：小概率挥手 + 「嗯？主人在看鲸鱼娘~」（30s 冷却）
+  - **滚轮**：缩放 80%–150%
+  - **右键菜单**：动作点播（全部 17 个动作）、设置面板、重置位置、隐藏桌宠
+- **会话状态联动**：
+  - 任务开始 → surprise + 「开工啦！」→ think
+  - 运行中 → think；超 60s → wait
+  - **审批等待** → wait + 「等主人审批中…」
+  - 同一 turn 连续 2 次工具出错 → angry
+  - 任务结束出错 → cry；成功 → happy（多工具时小概率 dance 庆祝）
+  - 空闲 90s → sleep；5 分钟 → 深度气泡「呼…呼…Zzz」
+  - 用户新指令唤醒 → idle + 「嗯？主人叫我~」
+  - **关键词触发**：对用户消息文本匹配「睡觉/跳舞/唱歌/吃/辛苦/摸摸/生气/游泳/你好」等 → 对应动作
+- **时间型**：整点报时、首次交互时段问候（早/午/晚/夜）、深夜 23–6 点提醒（每天一次，可开关）
+- **随机小动作**：空闲时每 40–90s 随机伸懒腰 / 害羞 / 小挥手（最低优先级，不打断状态动作）
+- **粒子特效**：happy/跳舞→爱心音符、哭哭→泪滴、睡觉→Zzz、游泳→泡泡、害羞→脸红、生气→💢
+- **偏好持久化**（localStorage `dshPetPrefs.v3`）：位置、大小、透明度、台词/整点/随机/深夜开关
+- **设置面板**（右键菜单 → 设置）：大小滑杆、透明度滑杆、四个开关、重置位置、隐藏
+- 明暗主题自适应（气泡/菜单/面板用 DSH 主题 CSS 变量）、低配降级（无帧回退静态图）
+
+## 动作优先级（打断规则）
+
+```
+用户主动(0) > 会话状态(1) > 时间型(2) > 随机小动作(3) > idle(99)
+```
+
+- 低优先级不能打断高优先级；用户动作打断状态动作后，播完自动恢复
+- sleep 只能被用户动作或唤醒打断
 
 ## 素材规格
 
-- 5 个动作均为 RunningHub MiniMax H3 **多图生视频（Ref2VA）** 生成，1:1 方屏
-- 绿幕背景 → 本地 chroma-key 抠图 → 透明 PNG 序列帧（220×220）
+- 17 个动作均为 RunningHub MiniMax H3 **多图生视频（Ref2VA）** 生成，1:1 方屏，纯绿幕（RGB ~80,224,0）
+- 本地 chroma-key 抠图（`scripts/process-pet-action.ps1`，chromakey + despill）→ 透明 PNG 序列帧（220×220）
 - 角色：深蓝渐变长卷发 + 鱼鳍发梢 + 呆毛、蓝白女仆装、围裙印蓝色小鲸鱼、蓝色鱼尾、Q 版 2-3 头身
 
 ## 结构
 
 ```
 dsh-pet/
-├── package.json         # @dsh-external/dsh-client-ui-pet v0.2.0
+├── package.json         # @dsh-external/dsh-client-ui-pet v0.3.0
 ├── cordis.patch.yml     # Cordis 补丁（客户端插件注册）
+├── docs/
+│   └── plan-more-animations-triggers.md   # v0.3 扩展计划（含决策记录）
+├── scripts/
+│   └── process-pet-action.ps1             # 绿幕 mp4 → 220×220 透明序列帧管线
 └── lib/
     ├── index.js         # 插件入口（转发 client）
-    └── client.js        # 桌宠 UI：拖动/吸附/序列帧引擎/气泡/双击切换
+    └── client.js        # 桌宠 UI：动作优先级引擎/交互/联动/时间型/粒子/设置
 ```
 
 ## 安装（本机开发）
@@ -62,8 +105,10 @@ dsh-pet/
 
 ## 序列帧素材位置
 
-- 帧目录：`G:\deepseek harness\outputs\imagegen\pet\{idle,happy,wave,sleep,cry}_0\{1..N}.png`
-- 源视频：`G:\deepseek harness\outputs\imagegen\pet-{happy,wave,sleep,cry}-720p.mp4`（736×736 1:1）
+- 帧目录：`G:\deepseek harness\outputs\imagegen\pet\{idle,happy,wave,sleep,cry,think,drag,eat,dance,blush,surprise,stretch,angry,music,swim,wait}_0\{1..N}.png`
+- 源视频：`G:\deepseek harness\outputs\imagegen\pet-*-720p.mp4`（1:1 绿幕）
+- 角色参考：`G:\deepseek harness\outputs\imagegen\鲸鱼娘三视图.png`
+- Ref2VA 提示词：`G:\deepseek harness\outputs\pet-ref2va-prompt-*.txt`
 
 ## License
 
