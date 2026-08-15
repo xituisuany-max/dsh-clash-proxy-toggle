@@ -376,20 +376,26 @@ window.__ModuleLoader__.load({
           if (!hasInner) { target = el; break; }  // 最内层
         }
         if (!target) {
-          // 备选：顶栏里含"DeepSeek"/模型名的最内层元素
+          // 备选：顶栏里含"DeepSeek"/模型名/自动识图的最内层元素
           for (var j = 0; j < all.length; j++) {
             var e2 = all[j];
             if (e2.offsetParent === null) continue;
             var t2 = (e2.textContent || "").replace(/\s/g, "");
-            if (!/DeepSeek|V4|High|模型/.test(t2)) continue;
+            if (!/DeepSeek|V4|High|模型|识图|自动/.test(t2)) continue;
             var hasInner2 = false;
             for (var c2 = 0; c2 < e2.children.length; c2++) {
-              if (/DeepSeek|V4|High|模型/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
+              if (/DeepSeek|V4|High|模型|识图|自动/.test((e2.children[c2].textContent || "").replace(/\s/g, ""))) { hasInner2 = true; break; }
             }
             if (!hasInner2 && e2.children.length <= 4) { target = e2; break; }
           }
         }
-        if (target) {
+        if (!target) {
+          // 最终兜底：挂到视口右上角固定位置（不依赖顶栏结构）
+          refBtn.style.cssText = REFBTN_INLINE + ";position:fixed;top:12px;right:180px;z-index:2147483000;background:var(--dsw-alias-bg-module-platform,#fff);border:1px solid var(--dsw-alias-border-l2,rgba(77,107,254,.3));border-radius:7px;box-shadow:0 2px 8px rgba(0,0,0,.15)";
+          document.body.appendChild(refBtn);
+          refMountedTop = true;
+          diag("ref mounted fallback fixed top-right");
+        } else if (target) {
           refBtn.style.cssText = REFBTN_INLINE;
           target.insertAdjacentElement("afterend", refBtn);
           refMountedTop = true;
