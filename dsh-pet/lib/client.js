@@ -22,6 +22,8 @@ window.__ModuleLoader__.load({
       wave:  { fps: 8,  loop: false },
       sleep: { fps: 8,  loop: true  },
       cry:   { fps: 8,  loop: false },
+      think: { fps: 8,  loop: true  },
+      drag:  { fps: 8,  loop: true  },
     };
     var frameTimer = null, currentAction = "idle", frameIdx = 0, frameList = [];
 
@@ -83,7 +85,7 @@ window.__ModuleLoader__.load({
         idleTimer = setInterval(function () {
           try {
             var now = Date.now();
-            if (now - lastUserActivity > IDLE_MS && !lastRunning && currentAction !== "sleep") {
+            if (now - lastUserActivity > IDLE_MS && !lastRunning && currentAction !== "sleep" && currentAction !== "think" && currentAction !== "drag") {
               dbg("idle -> sleep");
               playAction("sleep");
               showBubbleText("没人理我…先睡会儿 Zzz", 2600);
@@ -113,24 +115,35 @@ window.__ModuleLoader__.load({
               }
             }
             lastUserNodeCount = userCount;
-            // 出错检测：turn-error 或 tool-result.error 或 command outcome error
-            var hasError = false;
+            // 扫描本 turn 的错误节点（turn-error / tool-result.error / command error）
+            var turnHasError = false;
             for (var i = 0; i < nodes.length; i++) {
               var n = nodes[i];
               if (!n) continue;
-              if (n.kind === "turn-error") { hasError = true; break; }
-              if (n.kind === "tool-result" && n.error) { hasError = true; break; }
-              if (n.kind === "command" && n.outcome && n.outcome.kind === "error") { hasError = true; break; }
+              if (n.kind === "turn-error") { turnHasError = true; break; }
+              if (n.kind === "tool-result" && n.error) { turnHasError = true; break; }
+              if (n.kind === "command" && n.outcome && n.outcome.kind === "error") { turnHasError = true; break; }
             }
-            if (hasError) {
-              dbg("error node detected -> cry");
-              showBubbleText("呜…出错了 QAQ", 2600);
-              playAction("cry");
-            } else if (lastRunning && !running) {
-              // turn 刚结束且无错误 -> 完成 -> happy
-              dbg("turn finished -> happy");
-              showBubbleText("搞定啦！🎉", 2600);
-              playAction("happy");
+            // 思考状态：running 时播放 think（不打断用户主动动作 drag/sleep/wave/cry）
+            if (running && (currentAction === "idle" || currentAction === "think" || !currentAction)) {
+              if (currentAction !== "think") {
+                dbg("thinking -> think");
+                playAction("think");
+              }
+            } else if (!running && lastRunning) {
+              // turn 刚结束：只在结束时判断一次，避免运行中工具失败反复触发 cry
+              if (turnHasError) {
+                dbg("turn ended with error -> cry");
+                showBubbleText("呜…出错了 QAQ", 2600);
+                playAction("cry");
+              } else {
+                dbg("turn finished -> happy");
+                showBubbleText("搞定啦！🎉", 2600);
+                playAction("happy");
+              }
+            } else if (!running && currentAction === "think") {
+              // turn 结束回到 idle
+              playAction("idle");
             }
             lastRunning = running;
           });
@@ -256,7 +269,13 @@ window.__ModuleLoader__.load({
       window.addEventListener("mousemove", function (e) {
         if (!dragging) return;
         var dx = e.clientX - startX, dy = e.clientY - startY;
-        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+          if (!moved) {
+            moved = true;
+            // 开始拖动 -> 播放 drag 动作
+            if (currentAction !== "drag") playAction("drag");
+          }
+        }
         if (!moved) return;
         pet.style.left = (origX + dx) + "px";
         pet.style.top = (origY + dy) + "px";
@@ -265,6 +284,8 @@ window.__ModuleLoader__.load({
         if (!dragging) return;
         dragging = false;
         if (!moved) { onPetClick(); return; }
+        // 拖动结束 -> 回 idle（若当前是 drag）
+        if (currentAction === "drag") playAction("idle");
         var r = pet.getBoundingClientRect();
         var ww = window.innerWidth, wh = window.innerHeight;
         var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
