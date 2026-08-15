@@ -25,7 +25,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       if (document.body && document.body.dataset[MARKER]) return;
 
-      var state = { on: null, node: "", delay: null, sysProxy: false, busy: false, bridgeDown: false, nodes: [] };
+      var state = { on: null, node: "", delay: null, sysProxy: false, busy: false, bridgeDown: false, nodes: [], usage: null };
       var hideTimer = null;
 
       // ---------- 鲸鱼按钮 ----------
@@ -509,12 +509,19 @@ window.__ModuleLoader__.load({
       var rowNode = row("节点");
       var rowDelay = row("延迟");
       var rowSys = row("系统代理");
+      var rowUsage = row("本月流量");
       var delayDot = document.createElement("span");
       delayDot.style.cssText = "width:7px;height:7px;border-radius:50%;flex:none;background:#9aa3b5;transition:background .3s;";
       var delayText = document.createElement("span");
       delayText.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
       rowDelay._value.append(delayDot, delayText);
-      info.append(rowNode, rowDelay, rowSys);
+      // 流量进度条
+      var usageBar = document.createElement("div");
+      usageBar.style.cssText = "height:6px;border-radius:999px;background:var(--dsw-alias-border-l1,rgba(120,130,150,.2));margin:3px 0 2px;overflow:hidden;";
+      var usageFill = document.createElement("div");
+      usageFill.style.cssText = "height:100%;width:0%;border-radius:999px;background:#4d9fff;transition:width .4s,background .4s;";
+      usageBar.appendChild(usageFill);
+      info.append(rowNode, rowDelay, rowSys, rowUsage, usageBar);
 
       var divider = document.createElement("div");
       divider.style.cssText = "height:1px;margin:8px 12px;background:var(--dsw-alias-border-l1,rgba(120,130,150,.18));";
@@ -605,6 +612,7 @@ window.__ModuleLoader__.load({
           delayDot.style.background = "#9aa3b5";
         }
         rowSys._value.textContent = state.sysProxy ? "开" : "关";
+        renderUsage();
         // 主按钮
         if (state.busy) {
           pBtn.disabled = true;
@@ -623,6 +631,23 @@ window.__ModuleLoader__.load({
       }
 
       // ---------- 数据 ----------
+      function renderUsage() {
+        var u = state.usage || {};
+        var usedMB = u.usedMB || 0;
+        var budgetGB = u.budgetGB || 300;
+        var usedGB = usedMB / 1024;
+        var pct = Math.min(100, Math.round((usedGB / budgetGB) * 100));
+        rowUsage._value.textContent = (u.month ? u.month + " " : "") + usedGB.toFixed(2) + " GB / " + budgetGB + " GB（" + pct + "%）";
+        usageFill.style.width = pct + "%";
+        usageFill.style.background = pct >= 100 ? "#f5424d" : (pct >= 80 ? "#f5a142" : "#4d9fff");
+      }
+      function loadUsage() {
+        fetch(BRIDGE + "/proxy-usage", { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (u) { state.usage = u || state.usage; renderUsage(); })
+          .catch(function () {});
+      }
+
       function refresh() {
         fetch(BRIDGE + "/status", { cache: "no-store" })
           .then(function (r) { return r.json(); })
@@ -710,6 +735,7 @@ window.__ModuleLoader__.load({
         if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
         panel.style.display = "block";
         loadNodes();
+        loadUsage(); // 每次打开面板刷新流量记账
       }
       function scheduleHide() {
         if (hideTimer) clearTimeout(hideTimer);

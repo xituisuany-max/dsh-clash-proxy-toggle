@@ -34,6 +34,8 @@ const SCRIPT_PID_FILE = path.join(RUN_DIR, "clash-script.pid");
 const REG_PATH = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const LOG_FILE = path.join(__dirname, "bridge.log");
 const MEDIA_DIR = process.env.PROXY_BRIDGE_MEDIA_DIR || path.join(__dirname, "..", "outputs", "imagegen");
+const USAGE_FILE = process.env.PROXY_USAGE_FILE || "G:\\deepseek harness\\.proxy-usage.json";
+const USAGE_BUDGET_GB = 300;
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
@@ -292,6 +294,23 @@ function serveMedia(res, name) {
   });
 }
 
+function readProxyUsage() {
+  try {
+    if (fs.existsSync(USAGE_FILE)) {
+      const text = fs.readFileSync(USAGE_FILE, "utf8").replace(/^\uFEFF/, ""); // strip BOM
+      const raw = JSON.parse(text);
+      return {
+        month: raw.month || "",
+        usedMB: Number(raw.usedMB) || 0,
+        budgetGB: USAGE_BUDGET_GB,
+      };
+    }
+  } catch (e) {
+    log("proxy-usage read error: " + e.message);
+  }
+  return { month: "", usedMB: 0, budgetGB: USAGE_BUDGET_GB };
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://127.0.0.1:" + BRIDGE_PORT);
   const route = url.pathname;
@@ -310,6 +329,7 @@ const server = http.createServer((req, res) => {
       if (req.method === "GET" && route === "/health") return json(res, 200, { ok: true });
       if (req.method === "GET" && route === "/status") return json(res, 200, await getStatus());
       if (req.method === "GET" && route === "/nodes") return json(res, 200, { nodes: await listNodes() });
+      if (req.method === "GET" && route === "/proxy-usage") return json(res, 200, readProxyUsage());
       if (req.method === "GET" && route.startsWith("/media/")) {
         return serveMedia(res, decodeURIComponent(route.slice("/media/".length)));
       }
